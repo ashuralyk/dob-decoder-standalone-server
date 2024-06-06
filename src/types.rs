@@ -67,6 +67,18 @@ pub enum Error {
     DecoderBinaryNotFoundInCell,
     #[error("error ocurred while requesing json-rpc")]
     JsonRpcRequestError,
+    #[error("BTC node responsed bad")]
+    FetchFromBtcNodeError,
+    #[error("BTC transaction format broken")]
+    InvalidBtcTransactionFormat,
+    #[error("Inscription format broken")]
+    InvalidInscriptionFormat,
+    #[error("Inscription content must be hex format")]
+    InvalidInscriptionContentHexFormat,
+    #[error("Inscription content must be filled")]
+    EmptyInscriptionContent,
+    #[error("fs header like 'btcfs://' and 'ckbfs://' are not contained")]
+    InvalidOnchainFsuriFormat,
 }
 
 pub enum Dob<'a> {
