@@ -1,3 +1,4 @@
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -9,7 +10,9 @@ use ckb_jsonrpc_types::{
 use ckb_sdk::rpc::ckb_indexer::{Cell, Order, Pagination, SearchKey, Tx};
 use ckb_types::H256;
 use jsonrpc_core::futures::FutureExt;
+use lazy_regex::regex_replace_all;
 use reqwest::{Client, Url};
+use serde_json::Value;
 
 use crate::types::Error;
 
@@ -149,4 +152,179 @@ impl RpcClient {
         )
         .boxed()
     }
+}
+
+pub struct ImageFetchClient {
+    base_url: HashMap<String, Url>,
+    images_cache: VecDeque<(Url, Vec<u8>)>,
+    max_cache_size: usize,
+}
+
+impl ImageFetchClient {
+    pub fn new(base_url: &HashMap<String, String>, cache_size: usize) -> Self {
+        let base_url = base_url
+            .iter()
+            .map(|(k, v)| (k.clone(), Url::parse(v).expect("url")))
+            .collect::<HashMap<_, _>>();
+        Self {
+            base_url,
+            images_cache: VecDeque::new(),
+            max_cache_size: cache_size,
+        }
+    }
+
+    pub async fn fetch_images(&mut self, images_uri: &[String]) -> Result<Vec<Vec<u8>>, Error> {
+        let mut requests = vec![];
+        for uri in images_uri {
+            match uri.try_into()? {
+                URI::BTCFS(tx_hash, index) => {
+                    let url = self
+                        .base_url
+                        .get("btcfs")
+                        .ok_or(Error::FsuriNotFoundInConfig)?
+                        .join(&tx_hash)
+                        .expect("image url");
+                    let cached_image = self.images_cache.iter().find(|(v, _)| v == &url);
+                    if let Some((_, image)) = cached_image {
+                        requests.push(async { Ok((url, true, image.clone())) }.boxed());
+                    } else {
+                        requests.push(
+                            async move {
+                                let image = parse_image_from_btcfs(&url, index).await?;
+                                Ok((url, false, image))
+                            }
+                            .boxed(),
+                        );
+                    }
+                }
+                URI::IPFS(cid) => {
+                    let url = self
+                        .base_url
+                        .get("ipfs")
+                        .ok_or(Error::FsuriNotFoundInConfig)?
+                        .join(&cid)
+                        .expect("image url");
+                    let cached_image = self.images_cache.iter().find(|(v, _)| v == &url);
+                    if let Some((_, image)) = cached_image {
+                        requests.push(async { Ok((url, true, image.clone())) }.boxed());
+                    } else {
+                        requests.push(
+                            async move {
+                                let image = reqwest::get(url.clone())
+                                    .await
+                                    .map_err(|e| Error::FetchFromIpfsError(e.to_string()))?
+                                    .bytes()
+                                    .await
+                                    .map_err(|e| Error::FetchFromIpfsError(e.to_string()))?
+                                    .to_vec();
+                                Ok((url, false, image))
+                            }
+                            .boxed(),
+                        );
+                    }
+                }
+            }
+        }
+        let mut images = vec![];
+        let responses = futures::future::join_all(requests).await;
+        for response in responses {
+            let (url, from_cache, result) = response?;
+            images.push(result.to_vec());
+            if !from_cache {
+                self.images_cache.push_back((url, result));
+                if self.images_cache.len() > self.max_cache_size {
+                    self.images_cache.pop_front();
+                }
+            }
+        }
+        Ok(images)
+    }
+}
+
+#[allow(clippy::upper_case_acronyms)]
+enum URI {
+    BTCFS(String, usize),
+    IPFS(String),
+}
+
+impl TryFrom<&String> for URI {
+    type Error = Error;
+
+    fn try_from(uri: &String) -> Result<Self, Error> {
+        if uri.starts_with("btcfs://") {
+            let body = uri.chars().skip("btcfs://".len()).collect::<String>();
+            let parts: Vec<&str> = body.split('i').collect::<Vec<_>>();
+            if parts.len() != 2 {
+                return Err(Error::InvalidOnchainFsuriFormat);
+            }
+            let tx_hash = parts[0].to_string();
+            let index = parts[1]
+                .parse()
+                .map_err(|_| Error::InvalidOnchainFsuriFormat)?;
+            Ok(URI::BTCFS(tx_hash, index))
+        } else if uri.starts_with("ipfs://") {
+            let hash = uri.chars().skip("ipfs://".len()).collect::<String>();
+            Ok(URI::IPFS(hash))
+        } else {
+            Err(Error::InvalidOnchainFsuriFormat)
+        }
+    }
+}
+
+async fn parse_image_from_btcfs(url: &Url, index: usize) -> Result<Vec<u8>, Error> {
+    // parse btc transaction
+    let btc_tx = reqwest::get(url.clone())
+        .await
+        .map_err(|e| Error::FetchFromBtcNodeError(e.to_string()))?
+        .json::<Value>()
+        .await
+        .map_err(|e| Error::FetchFromBtcNodeError(e.to_string()))?;
+    let vin = btc_tx
+        .get("vin")
+        .ok_or(Error::InvalidBtcTransactionFormat(
+            "vin not found".to_string(),
+        ))?
+        .as_array()
+        .ok_or(Error::InvalidBtcTransactionFormat(
+            "vin not an array".to_string(),
+        ))?
+        .first()
+        .ok_or(Error::InvalidBtcTransactionFormat(
+            "vin is empty".to_string(),
+        ))?;
+    let mut witness = vin
+        .get("inner_witnessscript_asm")
+        .ok_or(Error::InvalidBtcTransactionFormat(
+            "inner_witnessscript_asm not found".to_string(),
+        ))?
+        .as_str()
+        .ok_or(Error::InvalidBtcTransactionFormat(
+            "inner_witnessscript_asm not a string".to_string(),
+        ))?
+        .to_owned();
+
+    // parse inscription body
+    let mut images = vec![];
+    let header = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 696d6167652f706e67 OP_0 OP_PUSHDATA2 ";
+    while let (Some(start), Some(end)) = (witness.find("OP_IF"), witness.find("OP_ENDIF")) {
+        let inscription = &witness[start..end + "OP_ENDIF".len()];
+        if !inscription.contains(header) {
+            return Err(Error::InvalidInscriptionFormat);
+        }
+        let base_removed = inscription.replace(header, "");
+        let hexed = regex_replace_all!(r#"\s?OP\_\w+\s?"#, &base_removed, "");
+        let image =
+            hex::decode(hexed.as_bytes()).map_err(|_| Error::InvalidInscriptionContentHexFormat)?;
+        images.push(image);
+        witness = witness[end + "OP_ENDIF".len()..].to_owned();
+    }
+    if images.is_empty() {
+        return Err(Error::EmptyInscriptionContent);
+    }
+
+    let image = images
+        .get(index)
+        .cloned()
+        .ok_or(Error::ExceededInscriptionIndex)?;
+    Ok(image)
 }
