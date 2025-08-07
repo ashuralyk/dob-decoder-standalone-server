@@ -4,15 +4,17 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use jsonrpsee::core::async_trait;
 use jsonrpsee::{proc_macros::rpc, tracing, types::error::ErrorObjectOwned};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::client::ImageFetchClient;
 use crate::decoder::helpers::{decode_cluster_data, decode_spore_data};
 use crate::decoder::DOBDecoder;
+use crate::svg::DOBSvgExtractor;
 use crate::types::Error;
 
 // decoding result contains rendered result from native decoder and DNA string for optional use
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ServerDecodeResult {
     render_output: String,
     dob_content: Value,
@@ -38,6 +40,9 @@ trait DecoderRpc {
         spore_data: String,
         cluster_data: String,
     ) -> Result<String, ErrorObjectOwned>;
+
+    #[method(name = "dob_decode_svg")]
+    async fn decode_svg(&self, hexed_spore_id: String) -> Result<String, ErrorObjectOwned>;
 }
 
 pub struct DecoderStandaloneServer {
@@ -135,6 +140,18 @@ impl DecoderRpcServer for DecoderStandaloneServer {
         .unwrap();
         tracing::info!("raw, result: {result}");
         Ok(result)
+    }
+
+    async fn decode_svg(&self, hexed_spore_id: String) -> Result<String, ErrorObjectOwned> {
+        let ServerDecodeResult {
+            render_output,
+            dob_content: _,
+        } = serde_json::from_str(&self.decode(hexed_spore_id).await?).unwrap();
+        let image_fetcher = ImageFetchClient::new(&self.decoder.setting().image_fetcher_url, 10);
+        let svg = DOBSvgExtractor::new(render_output, image_fetcher)?
+            .extract_svg()
+            .await?;
+        Ok(svg.unwrap_or(Default::default()))
     }
 }
 
