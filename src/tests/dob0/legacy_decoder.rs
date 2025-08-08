@@ -1,7 +1,9 @@
 use ckb_types::{h256, H256};
 
+use crate::client::ImageFetchClient;
 use crate::decoder::{helpers::decode_spore_content, DOBDecoder};
-use crate::tests::prepare_settings;
+use crate::svg::DOBSvgExtractor;
+use crate::tests::{prepare_settings, SettingType};
 use crate::types::{
     ClusterDescriptionField, DOBClusterFormat, DOBClusterFormatV0, DOBDecoderFormat,
     DecoderLocationType,
@@ -12,6 +14,8 @@ const EXPECTED_UNICORN_RENDER_RESULT: &str = "[{\"name\":\"wuxing_yinyang\",\"tr
 const EXPECTED_NERVAPE_RENDER_RESULT: &str = "[{\"name\":\"prev.type\",\"traits\":[{\"String\":\"text\"}]},{\"name\":\"prev.bg\",\"traits\":[{\"String\":\"btcfs://59e87ca177ef0fd457e87e9f93627660022cf519b531e1f4e3a6dda9e5e33827i0\"}]},{\"name\":\"prev.bgcolor\",\"traits\":[{\"String\":\"#CEBAF7\"}]},{\"name\":\"Background\",\"traits\":[{\"Number\":170}]},{\"name\":\"Suit\",\"traits\":[{\"Number\":236}]},{\"name\":\"Upper body\",\"traits\":[{\"Number\":53}]},{\"name\":\"Lower body\",\"traits\":[{\"Number\":189}]},{\"name\":\"Headwear\",\"traits\":[{\"Number\":175}]},{\"name\":\"Mask\",\"traits\":[{\"Number\":153}]},{\"name\":\"Eyewear\",\"traits\":[{\"Number\":126}]},{\"name\":\"Mouth\",\"traits\":[{\"Number\":14}]},{\"name\":\"Ears\",\"traits\":[{\"Number\":165}]},{\"name\":\"Tattoo\",\"traits\":[{\"Number\":231}]},{\"name\":\"Accessory\",\"traits\":[{\"Number\":78}]},{\"name\":\"Handheld\",\"traits\":[{\"Number\":240}]},{\"name\":\"Special\",\"traits\":[{\"Number\":70}]}]";
 const NERVAPE_SPORE_ID: H256 =
     h256!("0x9dd9604d44d6640d1533c9f97f89438f17526e645f6c35aa08d8c7d844578580");
+const MAINNET_NERVAPE_SPORE_ID: H256 =
+    h256!("0xbbe57f0e7f7ca6e6c59007b28150e39c9c6f5c209493801cfc9ef125e0937ed4");
 
 fn generate_nervape_dob_ingredients(onchain_decoder: bool) -> (Value, ClusterDescriptionField) {
     let nervape_content = json!({
@@ -79,11 +83,11 @@ fn generate_unicorn_dob_ingredients(onchain_decoder: bool) -> (Value, ClusterDes
 }
 
 async fn decode_unicorn_dna(onchain_decoder: bool) -> String {
-    let settings = prepare_settings("text/plain");
+    let settings = prepare_settings(SettingType::Testnet, vec!["text/plain"]);
     let decoder = DOBDecoder::new(settings);
     let (unicorn_content, unicorn_metadata) = generate_unicorn_dob_ingredients(onchain_decoder);
     decoder
-        .decode_dna(&unicorn_content["dna"].as_str().unwrap(), unicorn_metadata)
+        .decode_dna(unicorn_content["dna"].as_str().unwrap(), unicorn_metadata)
         .await
         .expect("decode")
 }
@@ -99,7 +103,7 @@ async fn test_decode_unicorn_dna() {
 
 #[tokio::test]
 async fn test_fetch_and_decode_nervape_dna() {
-    let settings = prepare_settings("text/plain");
+    let settings = prepare_settings(SettingType::Testnet, vec!["text/plain"]);
     let decoder = DOBDecoder::new(settings);
     let (_, dna, dob_metadata) = decoder
         .fetch_decode_ingredients(NERVAPE_SPORE_ID.into())
@@ -116,7 +120,7 @@ async fn test_fetch_and_decode_nervape_dna() {
 #[tokio::test]
 #[should_panic = "fetch: DOBVersionUnexpected"]
 async fn test_fetch_onchain_dob_failed() {
-    let settings = prepare_settings("dob/0");
+    let settings = prepare_settings(SettingType::Testnet, vec!["dob/0"]);
     DOBDecoder::new(settings)
         .fetch_decode_ingredients(NERVAPE_SPORE_ID.into())
         .await
@@ -164,8 +168,31 @@ fn test_decode_multiple_spore_data() {
     .into_iter()
     .enumerate()
     .for_each(|(i, spore_data)| {
-        let (_, v) =
-            decode_spore_content(spore_data.as_bytes()).expect(&format!("assert type index {i}"));
+        let (_, v) = decode_spore_content(spore_data.as_bytes())
+            .unwrap_or_else(|_| panic!("assert type index {i}"));
         assert_eq!(v, dna, "object type comparison failed");
     });
+}
+
+#[tokio::test]
+async fn test_fetch_and_decode_mainnet_nervape_dna_to_svg() {
+    let settings = prepare_settings(SettingType::Mainnet, vec![]);
+    let image_fetcher = ImageFetchClient::new(&settings.image_fetcher_url, 10);
+    let decoder = DOBDecoder::new(settings);
+    let (_, dna, dob_metadata) = decoder
+        .fetch_decode_ingredients(MAINNET_NERVAPE_SPORE_ID.into())
+        .await
+        .expect("fetch");
+    let render_result = decoder
+        .decode_dna(&dna, dob_metadata)
+        // array type
+        .await
+        .expect("decode");
+    let svg_extractor = DOBSvgExtractor::new(render_result, image_fetcher).unwrap();
+    let svg_content = svg_extractor
+        .extract_svg()
+        .await
+        .unwrap()
+        .unwrap_or_default();
+    println!("svg_content: {svg_content}");
 }
