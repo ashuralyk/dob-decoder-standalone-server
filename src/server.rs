@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use base64::{engine::general_purpose::STANDARD, Engine};
 use jsonrpsee::core::async_trait;
 use jsonrpsee::{proc_macros::rpc, tracing, types::error::ErrorObjectOwned};
 use serde::{Deserialize, Serialize};
@@ -43,6 +44,13 @@ trait DecoderRpc {
 
     #[method(name = "dob_decode_svg")]
     async fn decode_svg(&self, hexed_spore_id: String) -> Result<String, ErrorObjectOwned>;
+
+    #[method(name = "dob_extract_image_from_fsuri")]
+    async fn extract_image_from_fsuri(
+        &self,
+        fsuri: String,
+        encode_type: Option<String>,
+    ) -> Result<String, ErrorObjectOwned>;
 }
 
 pub struct DecoderStandaloneServer {
@@ -152,6 +160,30 @@ impl DecoderRpcServer for DecoderStandaloneServer {
             .extract_svg()
             .await?;
         Ok(svg.unwrap_or(Default::default()))
+    }
+
+    async fn extract_image_from_fsuri(
+        &self,
+        fsuri: String,
+        encode_type: Option<String>,
+    ) -> Result<String, ErrorObjectOwned> {
+        let mut image_fetcher =
+            ImageFetchClient::new(&self.decoder.setting().image_fetcher_url, 10);
+        let raw_images = image_fetcher.fetch_images(&[fsuri]).await?;
+        let image = raw_images.first().unwrap();
+
+        match encode_type.as_deref() {
+            Some("hex") => Ok(hex::encode(image)),
+            Some("base64") => Ok(STANDARD.encode(image)),
+            unknown => Err(ErrorObjectOwned::owned::<serde_json::Value>(
+                -1,
+                format!(
+                    "Unknown encode type: {}. Supported types: 'base64', 'hex'",
+                    unknown.unwrap_or("unknown")
+                ),
+                None,
+            )),
+        }
     }
 }
 
