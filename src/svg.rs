@@ -8,7 +8,7 @@ use crate::{
 };
 
 const DOB0_TRAIT_NAME: &str = "prev.bg";
-const DOB1_TRAIT_NAME: &str = "IMAGE.0";
+const DOB1_TRAIT_NAME: &str = "IMAGE";
 const DEFAULT_SIZE: u32 = 500;
 
 /// Detects the MIME type of an image from its hex-encoded content by examining file signatures.
@@ -124,10 +124,7 @@ impl DOBSvgExtractor {
             };
             let image_content_base64 = STANDARD.encode(&image_content);
             let svg_content = format!(
-                r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="500" height="500" viewBox="0 0 500 500" version="1.1">
-                        <image width="{DEFAULT_SIZE}" height="{DEFAULT_SIZE}" href="data:{image_mime_type};base64,{image_content_base64}" preserveAspectRatio="xMidYMid slice" />
-                    </svg>"#
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" width="500" height="500" viewBox="0 0 500 500" version="1.1"><image width="{DEFAULT_SIZE}" height="{DEFAULT_SIZE}" href="data:{image_mime_type};base64,{image_content_base64}" preserveAspectRatio="xMidYMid slice" /></svg>"#
             );
             Ok(Some(svg_content))
         } else {
@@ -155,8 +152,8 @@ impl DOBSvgExtractor {
 
     async fn replace_svg_fsurls(&mut self, svg_content: String) -> Result<Option<String>, Error> {
         // Create regex patterns to match btcfs:// and ipfs:// URLs in href attributes
-        let btcfs_pattern = regex!(r#"href="btcfs://([^"]+)""#);
-        let ipfs_pattern = regex!(r#"href="ipfs://([^"]+)""#);
+        let btcfs_pattern = regex!(r#"href='btcfs://([^']+)'"#);
+        let ipfs_pattern = regex!(r#"href='ipfs://([^']+)'"#);
 
         let mut processed_svg = svg_content.clone();
 
@@ -193,8 +190,8 @@ impl DOBSvgExtractor {
             let data_url = format!("data:{};base64,{}", mime_type, base64_content);
 
             // Replace the URL in the SVG
-            let old_href = format!("href=\"{}\"", url);
-            let new_href = format!("href=\"{}\"", data_url);
+            let old_href = format!("href='{}'", url);
+            let new_href = format!("href='{}'", data_url);
             processed_svg = processed_svg.replace(&old_href, &new_href);
         }
 
