@@ -2,11 +2,15 @@ use ckb_types::{h256, H256};
 
 use crate::client::ImageFetchClient;
 use crate::decoder::{helpers::decode_spore_content, DOBDecoder};
+use crate::svg::puretext::parsers::{
+    text_parser::render_text_params_parser, traits_parser::dob_output_parser,
+};
+use crate::svg::puretext::render::render_text_parser_result_to_svg;
 use crate::svg::DOBSvgExtractor;
 use crate::tests::{prepare_settings, SettingType};
 use crate::types::{
     ClusterDescriptionField, DOBClusterFormat, DOBClusterFormatV0, DOBDecoderFormat,
-    DecoderLocationType,
+    DecoderLocationType, StandardDOBOutput,
 };
 use serde_json::{json, Value};
 
@@ -175,6 +179,25 @@ fn test_decode_multiple_spore_data() {
 }
 
 #[tokio::test]
+async fn test_unicorn_dna_to_svg() {
+    let render_result = decode_unicorn_dna(false).await;
+    let parsed_render_result: Vec<StandardDOBOutput> =
+        serde_json::from_str(&render_result).unwrap();
+    let output_parser_result = dob_output_parser(&parsed_render_result);
+    println!("\noutput_parser_result: {output_parser_result:?}");
+
+    let text_parser_result = render_text_params_parser(
+        &output_parser_result.traits,
+        &output_parser_result.index_var_register,
+        None,
+    );
+    println!("\ntext_parser_result: {text_parser_result:?}");
+
+    let svg = render_text_parser_result_to_svg(&text_parser_result);
+    println!("\nGenerated SVG:\n{}", svg);
+}
+
+#[tokio::test]
 async fn test_fetch_and_decode_mainnet_nervape_dna_to_svg() {
     let settings = prepare_settings(SettingType::Mainnet, vec![]);
     let image_fetcher = ImageFetchClient::new(&settings.image_fetcher_url, 10);
@@ -195,4 +218,97 @@ async fn test_fetch_and_decode_mainnet_nervape_dna_to_svg() {
         .unwrap()
         .unwrap_or_default();
     println!("svg_content: {svg_content}");
+}
+
+#[test]
+fn test_manual_render_output_to_svg() {
+    let render_output_source = serde_json::json!([
+        {
+            "name": "wuxing_yinyang",
+            "traits": [
+                { "String": "3<_>" }
+            ]
+        },
+        {
+            "name": "prev.bgcolor",
+            "traits": [
+                { "String": "#(70deg, blue, pink, #f00)" }
+            ]
+        },
+        {
+            "name": "prev<%v>",
+            "traits": [
+                { "String": "(%wuxing_yinyang):['#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#000000', '#000000', '#000000', '#000000', '#000000'])" }
+            ]
+        },
+        {
+            "name": "Spirits",
+            "traits": [
+                { "String": "(%wuxing_yinyang):['Metal, Golden Body', 'Wood, Blue Body', 'Water, White Body', 'Fire, Red Body', 'Earth, Colorful Body']" }
+            ]
+        },
+        {
+            "name": "Yin Yang",
+            "traits": [
+                { "String": "(%wuxing_yinyang):['Yin, Long hair', 'Yin, Long hair', 'Yin, Long hair', 'Yin, Long hair', 'Yin, Long hair', 'Yang, Short Hair', 'Yang, Short Hair', 'Yang, Short Hair', 'Yang, Short Hair', 'Yang, Short Hair']" }
+            ]
+        },
+        {
+            "name": "Talents",
+            "traits": [
+                { "String": "(%wuxing_yinyang):['Guard', 'Attack', 'Death', 'Revival', 'Forget', 'Summon', 'Prophet', 'Curse', 'Hermit', 'Crown']" }
+            ]
+        },
+        {
+            "name": "Horn",
+            "traits": [
+                { "String": "(%wuxing_yinyang):['Praetorian Horn', 'Warrior Horn', 'Hel Horn', 'Shaman Horn', 'Lethe Horn', 'Bard Horn', 'Sibyl Horn ', 'Necromancer Horn', 'Lao Tsu Horn', 'Caesar Horn']" }
+            ]
+        },
+        {
+            "name": "Wings",
+            "traits": [
+                { "String": "Golden Wings" }
+            ]
+        },
+        {
+            "name": "Tails<%k: %v>",
+            "traits": [
+                { "String": "Meteor Tails<#000*bi>" }
+            ]
+        },
+        {
+            "name": "Horseshoes",
+            "traits": [
+                { "String": "Dimond Horseshoes" }
+            ]
+        },
+        {
+            "name": "Destiny Number",
+            "traits": [
+                { "Number": 59616 }
+            ]
+        },
+        {
+            "name": "Lucky Number",
+            "traits": [
+                { "Number": 35 }
+            ]
+        }
+    ]);
+    let render_output: Vec<StandardDOBOutput> =
+        serde_json::from_value(render_output_source).unwrap();
+
+    let output_parser_result = dob_output_parser(&render_output);
+    println!("\noutput_parser_result: {output_parser_result:?}");
+
+    let text_parser_result = render_text_params_parser(
+        &output_parser_result.traits,
+        &output_parser_result.index_var_register,
+        None,
+    );
+    println!("\ntext_parser_result: {text_parser_result:?}");
+
+    let svg = render_text_parser_result_to_svg(&text_parser_result);
+    println!("\nGenerated SVG:\n{}", svg);
 }

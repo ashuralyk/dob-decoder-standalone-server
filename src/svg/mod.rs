@@ -7,6 +7,8 @@ use crate::{
     types::{Error, StandardDOBOutput},
 };
 
+pub mod puretext;
+
 const DOB0_TRAIT_NAME: &str = "prev.bg";
 const DOB1_TRAIT_NAME: &str = "IMAGE";
 const DEFAULT_SIZE: u32 = 500;
