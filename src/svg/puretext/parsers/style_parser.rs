@@ -34,14 +34,9 @@ impl Default for ParsedStyle {
     }
 }
 
+#[derive(Default)]
 pub struct StyleParserOptions {
     pub base_style: Option<ParsedStyle>,
-}
-
-impl Default for StyleParserOptions {
-    fn default() -> Self {
-        Self { base_style: None }
-    }
 }
 
 pub fn style_parser(input: &str, options: Option<StyleParserOptions>) -> ParsedStyle {

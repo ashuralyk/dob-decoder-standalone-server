@@ -85,7 +85,7 @@ pub fn dob_output_parser(items: &[StandardDOBOutput]) -> TraitsParserResult {
                 // Convert to ISO string format
                 let timestamp_ms = timestamp as i64;
                 let datetime = chrono::DateTime::from_timestamp_millis(timestamp_ms)
-                    .unwrap_or_else(|| chrono::Utc::now());
+                    .unwrap_or_else(chrono::Utc::now);
                 let iso_string = datetime.to_rfc3339();
 
                 return Some(SimpleDOBOutput {

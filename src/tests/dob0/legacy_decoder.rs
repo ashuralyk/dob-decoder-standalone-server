@@ -2,9 +2,7 @@ use ckb_types::{h256, H256};
 
 use crate::client::ImageFetchClient;
 use crate::decoder::{helpers::decode_spore_content, DOBDecoder};
-use crate::svg::puretext::parsers::{
-    text_parser::render_text_params_parser, traits_parser::dob_output_parser,
-};
+use crate::svg::puretext::parsers::{dob_output_parser, render_text_params_parser};
 use crate::svg::puretext::render::render_text_parser_result_to_svg;
 use crate::svg::DOBSvgExtractor;
 use crate::tests::{prepare_settings, SettingType};
@@ -20,6 +18,8 @@ const NERVAPE_SPORE_ID: H256 =
     h256!("0x9dd9604d44d6640d1533c9f97f89438f17526e645f6c35aa08d8c7d844578580");
 const MAINNET_NERVAPE_SPORE_ID: H256 =
     h256!("0xbbe57f0e7f7ca6e6c59007b28150e39c9c6f5c209493801cfc9ef125e0937ed4");
+const UNICORN_SPORE_ID: H256 =
+    h256!("0xe5bd5bbf82fec9107ba86fb65b3756915ca0d3a28d5e13a0aa82269b62a129ef");
 
 fn generate_nervape_dob_ingredients(onchain_decoder: bool) -> (Value, ClusterDescriptionField) {
     let nervape_content = json!({
@@ -212,11 +212,7 @@ async fn test_fetch_and_decode_mainnet_nervape_dna_to_svg() {
         .await
         .expect("decode");
     let svg_extractor = DOBSvgExtractor::new(render_result, image_fetcher).unwrap();
-    let svg_content = svg_extractor
-        .extract_svg()
-        .await
-        .unwrap()
-        .unwrap_or_default();
+    let svg_content = svg_extractor.extract_svg().await.unwrap();
     println!("svg_content: {svg_content}");
 }
 
@@ -311,4 +307,22 @@ fn test_manual_render_output_to_svg() {
 
     let svg = render_text_parser_result_to_svg(&text_parser_result);
     println!("\nGenerated SVG:\n{}", svg);
+}
+
+#[tokio::test]
+async fn test_decode_mainnet_unicorn_to_svg() {
+    let settings = prepare_settings(SettingType::Mainnet, vec![]);
+    let image_fetcher = ImageFetchClient::new(&settings.image_fetcher_url, 10);
+    let decoder = DOBDecoder::new(settings);
+    let (_, dna, dob_metadata) = decoder
+        .fetch_decode_ingredients(UNICORN_SPORE_ID.into())
+        .await
+        .expect("fetch");
+    let render_result = decoder
+        .decode_dna(&dna, dob_metadata)
+        .await
+        .expect("decode");
+    let svg_extractor = DOBSvgExtractor::new(render_result, image_fetcher).unwrap();
+    let svg_content = svg_extractor.extract_svg().await.unwrap();
+    println!("svg_content: {svg_content}");
 }

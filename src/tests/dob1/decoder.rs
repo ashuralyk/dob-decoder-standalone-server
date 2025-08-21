@@ -79,10 +79,6 @@ async fn test_mainnet_dob1_decode_to_svg() {
     let dna = content.get("dna").unwrap().as_str().unwrap();
     let render_result = decoder.decode_dna(dna, dob_metadata).await.expect("decode");
     let svg_extractor = DOBSvgExtractor::new(render_result, image_fetcher).unwrap();
-    let svg_content = svg_extractor
-        .extract_svg()
-        .await
-        .unwrap()
-        .unwrap_or_default();
+    let svg_content = svg_extractor.extract_svg().await.unwrap();
     println!("svg_content: {svg_content}");
 }

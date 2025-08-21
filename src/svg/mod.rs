@@ -4,6 +4,10 @@ use serde_json::Value;
 
 use crate::{
     client::ImageFetchClient,
+    svg::puretext::{
+        parsers::{dob_output_parser, render_text_params_parser},
+        render::render_text_parser_result_to_svg,
+    },
     types::{Error, StandardDOBOutput},
 };
 
@@ -90,19 +94,21 @@ impl DOBSvgExtractor {
         })
     }
 
-    pub async fn extract_svg(mut self) -> Result<Option<String>, Error> {
-        if let Some(svg) = self.extract_svg_from_legacy_dob0().await? {
-            return Ok(Some(svg));
+    pub async fn extract_svg(mut self) -> Result<String, Error> {
+        if let Some(svg) = self.extract_svg_from_dob0().await? {
+            return Ok(svg);
         }
 
         if let Some(dob1_svg) = self.extract_svg_from_dob1().await? {
-            return Ok(Some(dob1_svg));
+            return Ok(dob1_svg);
         }
 
-        Ok(None)
+        let text_svg = self.extract_svg_from_dob0_text()?;
+
+        Ok(text_svg)
     }
 
-    async fn extract_svg_from_legacy_dob0(&mut self) -> Result<Option<String>, Error> {
+    async fn extract_svg_from_dob0(&mut self) -> Result<Option<String>, Error> {
         let fsurl = self.parsed_dob.iter().find_map(|dob| {
             if dob.name == DOB0_TRAIT_NAME {
                 if let Some(dob_trait) = dob.traits.iter().find(|value| value.type_ == "String") {
@@ -150,6 +156,17 @@ impl DOBSvgExtractor {
         } else {
             Ok(None)
         }
+    }
+
+    fn extract_svg_from_dob0_text(&mut self) -> Result<String, Error> {
+        let dob_output_result = dob_output_parser(&self.parsed_dob);
+        let text_render_result = render_text_params_parser(
+            &dob_output_result.traits,
+            &dob_output_result.index_var_register,
+            None,
+        );
+        let svg = render_text_parser_result_to_svg(&text_render_result);
+        Ok(svg)
     }
 
     async fn replace_svg_fsurls(&mut self, svg_content: String) -> Result<Option<String>, Error> {

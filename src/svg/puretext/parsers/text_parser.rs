@@ -5,30 +5,20 @@ use serde_json::Value;
 use crate::svg::puretext::{
     constants::{key::Key, regex::*},
     parsers::{
-        background_parser::{background_color_parser, BackgroundColorOptions},
-        style_parser::{
-            style_parser, ParsedStyle, ParsedStyleAlignment, ParsedStyleFormat, StyleParserOptions,
-        },
+        background_color_parser, style_parser, BackgroundColorOptions, ParsedStyle,
+        ParsedStyleAlignment, ParsedStyleFormat, StyleParserOptions,
     },
     SimpleDOBOutput, TraitExt as _,
 };
 
 pub const DEFAULT_TEMPLATE: &str = "%k: %v";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TextParserOptions {
     pub default_template: Option<String>,
 }
 
-impl Default for TextParserOptions {
-    fn default() -> Self {
-        Self {
-            default_template: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StyleCss {
     pub text_align: Option<String>,
     pub color: Option<String>,
@@ -37,24 +27,9 @@ pub struct StyleCss {
     pub text_decoration: Option<String>,
 }
 
-impl Default for StyleCss {
-    fn default() -> Self {
-        Self {
-            text_align: None,
-            color: None,
-            font_weight: None,
-            font_style: None,
-            text_decoration: None,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct TextItem {
-    pub name: String,
-    pub value: Value,
     pub parsed_style: ParsedStyle,
-    pub template: String,
     pub text: String,
     pub style: StyleCss,
 }
@@ -121,7 +96,7 @@ pub fn render_text_params_parser(
 
             // Parse value for layout and style
             if let Some(value_str) = trait_.get_string_value() {
-                if let Some(captures) = TEMPLATE_REG.captures(&value_str) {
+                if let Some(captures) = TEMPLATE_REG.captures(value_str) {
                     if let Some(value_match) = captures.get(1) {
                         processed_value = Value::String(value_match.as_str().to_string());
                     }
@@ -191,10 +166,7 @@ pub fn render_text_params_parser(
             }
 
             TextItem {
-                name: processed_name,
-                value: processed_value,
                 parsed_style,
-                template: current_template,
                 text,
                 style: style_css,
             }
