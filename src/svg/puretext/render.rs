@@ -1,5 +1,4 @@
-use crate::svg::puretext::parsers::style_parser::ParsedStyleAlignment;
-use crate::svg::puretext::parsers::text_parser::{TextItem, TextParserResult};
+use crate::svg::puretext::parsers::{ParsedStyleAlignment, TextItem, TextParserResult};
 
 #[derive(Debug, Clone)]
 pub struct RenderProps {
@@ -18,7 +17,6 @@ impl From<TextParserResult> for RenderProps {
 
 #[derive(Debug, Clone)]
 pub struct RenderElement {
-    pub key: String,
     pub element_type: String,
     pub props: ElementProps,
 }
@@ -29,37 +27,13 @@ pub struct ElementProps {
     pub style: StyleProps,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StyleProps {
-    pub display: Option<String>,
     pub justify_content: Option<String>,
-    pub flex_wrap: Option<String>,
-    pub width: Option<String>,
-    pub margin: Option<String>,
-    pub height: Option<String>,
-    pub text_align: Option<String>,
     pub color: Option<String>,
     pub font_weight: Option<String>,
     pub font_style: Option<String>,
     pub text_decoration: Option<String>,
-}
-
-impl Default for StyleProps {
-    fn default() -> Self {
-        Self {
-            display: None,
-            justify_content: None,
-            flex_wrap: None,
-            width: None,
-            margin: None,
-            height: None,
-            text_align: None,
-            color: None,
-            font_weight: None,
-            font_style: None,
-            text_decoration: None,
-        }
-    }
 }
 
 pub fn render_text_svg(props: RenderProps) -> String {
@@ -80,12 +54,10 @@ fn convert_items_to_elements(items: &[TextItem]) -> Vec<RenderElement> {
             ParsedStyleAlignment::Right => "flex-end",
         };
 
-        let mut style = StyleProps::default();
-        style.display = Some("flex".to_string());
-        style.justify_content = Some(justify_content.to_string());
-        style.flex_wrap = Some("wrap".to_string());
-        style.width = Some("100%".to_string());
-        style.margin = Some("0".to_string());
+        let mut style = StyleProps {
+            justify_content: Some(justify_content.to_string()),
+            ..Default::default()
+        };
 
         // Apply text styling
         if let Some(color) = &item.style.color {
@@ -102,7 +74,6 @@ fn convert_items_to_elements(items: &[TextItem]) -> Vec<RenderElement> {
         }
 
         let element = RenderElement {
-            key: item.name.clone(),
             element_type: "p".to_string(),
             props: ElementProps {
                 children: vec![item.text.clone()],
@@ -119,17 +90,12 @@ fn convert_items_to_elements(items: &[TextItem]) -> Vec<RenderElement> {
             elements.push(element);
 
             // Add additional line breaks
-            for i in 0..item.parsed_style.break_line {
+            for _ in 0..item.parsed_style.break_line {
                 let break_element = RenderElement {
-                    key: format!("{}-break-{}", item.name, i),
                     element_type: "p".to_string(),
                     props: ElementProps {
                         children: vec![],
-                        style: StyleProps {
-                            height: Some("36px".to_string()),
-                            margin: Some("0".to_string()),
-                            ..Default::default()
-                        },
+                        style: Default::default(),
                     },
                 };
                 elements.push(break_element);
@@ -152,7 +118,7 @@ fn generate_svg(elements: &[RenderElement], bg_color: &str) -> String {
     let mut used_font_weights = std::collections::HashSet::new();
 
     // Calculate dynamic height based on content with minimum of 500
-    let calculated_height = elements.len() * line_height + padding_y;
+    let calculated_height = elements.len() * line_height + padding_y + 10;
     let height = std::cmp::max(calculated_height as u32, 500);
 
     // First pass: collect used font weights
@@ -315,18 +281,19 @@ text {
 }
 
 fn calculate_gradient_coordinates(angle: f64) -> (String, String, String, String) {
-    // For CSS linear-gradient, 0deg points to the right, 90deg points down
+    // For CSS linear-gradient, 0deg points up, 90deg points right
     // We need to calculate the gradient line that goes through the rectangle at the given angle
 
     // Normalize angle to 0-360 range
     let normalized_angle = angle % 360.0;
 
-    // Convert angle to radians
-    let angle_rad = normalized_angle.to_radians();
+    // Convert CSS angle to mathematical angle (CSS: 0deg = up, Math: 0deg = right)
+    // CSS angles are measured clockwise from top, math angles counter-clockwise from right
+    let math_angle = (90.0 - normalized_angle).to_radians();
 
     // Calculate the direction vector
-    let dx = angle_rad.sin();
-    let dy = angle_rad.cos();
+    let dx = math_angle.cos();
+    let dy = -math_angle.sin(); // Negative because SVG y-axis is flipped
 
     // For a rectangle with width=100% and height=100%, we need to find
     // the intersection points of the gradient line with the rectangle boundaries
@@ -345,7 +312,7 @@ fn calculate_gradient_coordinates(angle: f64) -> (String, String, String, String
     if dx.abs() > 1e-10 {
         let t = -center_x / dx;
         let y = center_y + t * dy;
-        if y >= 0.0 && y <= 1.0 {
+        if (0.0..=1.0).contains(&y) {
             t_values.push((t, 0.0, y));
         }
     }
@@ -354,7 +321,7 @@ fn calculate_gradient_coordinates(angle: f64) -> (String, String, String, String
     if dx.abs() > 1e-10 {
         let t = (1.0 - center_x) / dx;
         let y = center_y + t * dy;
-        if y >= 0.0 && y <= 1.0 {
+        if (0.0..=1.0).contains(&y) {
             t_values.push((t, 1.0, y));
         }
     }
@@ -363,7 +330,7 @@ fn calculate_gradient_coordinates(angle: f64) -> (String, String, String, String
     if dy.abs() > 1e-10 {
         let t = -center_y / dy;
         let x = center_x + t * dx;
-        if x >= 0.0 && x <= 1.0 {
+        if (0.0..=1.0).contains(&x) {
             t_values.push((t, x, 0.0));
         }
     }
@@ -372,7 +339,7 @@ fn calculate_gradient_coordinates(angle: f64) -> (String, String, String, String
     if dy.abs() > 1e-10 {
         let t = (1.0 - center_y) / dy;
         let x = center_x + t * dx;
-        if x >= 0.0 && x <= 1.0 {
+        if (0.0..=1.0).contains(&x) {
             t_values.push((t, x, 1.0));
         }
     }
@@ -385,8 +352,7 @@ fn calculate_gradient_coordinates(angle: f64) -> (String, String, String, String
         let (_, x2, y2) = t_values[t_values.len() - 1];
 
         // Convert to percentage strings
-        // For CSS linear-gradient, the gradient flows in the direction of the angle
-        // So we want the start point to be where the gradient begins
+        // Use the endpoints as calculated to match CSS linear-gradient behavior
         (
             format!("{:.1}%", x1 * 100.0),
             format!("{:.1}%", y1 * 100.0),
@@ -430,20 +396,6 @@ fn escape_xml(text: &str) -> String {
         .replace(">", "&gt;")
         .replace("\"", "&quot;")
         .replace("'", "&apos;")
-}
-
-// Legacy function for backward compatibility
-pub fn render_text_params(render_output: Vec<crate::types::StandardDOBOutput>) -> String {
-    use crate::svg::puretext::parsers::{text_parser, traits_parser};
-
-    let traits_parser_result = traits_parser::dob_output_parser(&render_output);
-    let text_parser_result = text_parser::render_text_params_parser(
-        &traits_parser_result.traits,
-        &traits_parser_result.index_var_register,
-        None,
-    );
-
-    render_text_parser_result_to_svg(&text_parser_result)
 }
 
 pub fn render_text_parser_result_to_svg(text_parser_result: &TextParserResult) -> String {

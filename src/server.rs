@@ -159,7 +159,7 @@ impl DecoderRpcServer for DecoderStandaloneServer {
         let svg = DOBSvgExtractor::new(render_output, image_fetcher)?
             .extract_svg()
             .await?;
-        Ok(svg.unwrap_or(Default::default()))
+        Ok(svg)
     }
 
     async fn extract_image_from_fsuri(
