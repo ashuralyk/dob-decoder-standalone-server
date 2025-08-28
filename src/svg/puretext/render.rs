@@ -233,7 +233,7 @@ fn create_gradient_background(gradient_css: &str, width: u32, height: u32) -> (S
 
     // Create background rect with gradient fill
     let background_rect = format!(
-        r#"<rect width="{}" height="{}" fill="url(#{}"/>"#,
+        r#"<rect width="{}" height="{}" fill="url(#{})"/>"#,
         width, height, gradient_id
     );
 

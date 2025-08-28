@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -156,24 +156,18 @@ impl RpcClient {
 
 pub struct ImageFetchClient {
     base_url: HashMap<String, Url>,
-    images_cache: VecDeque<(Url, Vec<u8>)>,
-    max_cache_size: usize,
 }
 
+unsafe impl Sync for ImageFetchClient {}
+
 impl ImageFetchClient {
-    pub fn new(base_url: &HashMap<String, String>, cache_size: usize) -> Self {
-        let base_url = base_url
-            .iter()
-            .map(|(k, v)| (k.clone(), Url::parse(v).expect("url")))
-            .collect::<HashMap<_, _>>();
+    pub fn new(base_url: &HashMap<String, Url>) -> Self {
         Self {
-            base_url,
-            images_cache: VecDeque::new(),
-            max_cache_size: cache_size,
+            base_url: base_url.clone(),
         }
     }
 
-    pub async fn fetch_images(&mut self, images_uri: &[String]) -> Result<Vec<Vec<u8>>, Error> {
+    pub async fn fetch_images(&self, images_uri: &[String]) -> Result<Vec<Vec<u8>>, Error> {
         let mut requests = vec![];
         for uri in images_uri {
             match uri.try_into()? {
@@ -184,18 +178,7 @@ impl ImageFetchClient {
                         .ok_or(Error::FsuriNotFoundInConfig)?
                         .join(&tx_hash)
                         .expect("image url");
-                    let cached_image = self.images_cache.iter().find(|(v, _)| v == &url);
-                    if let Some((_, image)) = cached_image {
-                        requests.push(async { Ok((url, true, image.clone())) }.boxed());
-                    } else {
-                        requests.push(
-                            async move {
-                                let image = parse_image_from_btcfs(&url, index).await?;
-                                Ok((url, false, image))
-                            }
-                            .boxed(),
-                        );
-                    }
+                    requests.push(parse_image_from_btcfs(url, index).boxed());
                 }
                 URI::IPFS(cid) => {
                     let url = self
@@ -204,38 +187,26 @@ impl ImageFetchClient {
                         .ok_or(Error::FsuriNotFoundInConfig)?
                         .join(&cid)
                         .expect("image url");
-                    let cached_image = self.images_cache.iter().find(|(v, _)| v == &url);
-                    if let Some((_, image)) = cached_image {
-                        requests.push(async { Ok((url, true, image.clone())) }.boxed());
-                    } else {
-                        requests.push(
-                            async move {
-                                let image = reqwest::get(url.clone())
-                                    .await
-                                    .map_err(|e| Error::FetchFromIpfsError(e.to_string()))?
-                                    .bytes()
-                                    .await
-                                    .map_err(|e| Error::FetchFromIpfsError(e.to_string()))?
-                                    .to_vec();
-                                Ok((url, false, image))
-                            }
-                            .boxed(),
-                        );
-                    }
+                    requests.push(
+                        async move {
+                            let image = reqwest::get(url.clone())
+                                .await
+                                .map_err(|e| Error::FetchFromIpfsError(e.to_string()))?
+                                .bytes()
+                                .await
+                                .map_err(|e| Error::FetchFromIpfsError(e.to_string()))?
+                                .to_vec();
+                            Ok(image)
+                        }
+                        .boxed(),
+                    );
                 }
             }
         }
         let mut images = vec![];
         let responses = futures::future::join_all(requests).await;
         for response in responses {
-            let (url, from_cache, result) = response?;
-            images.push(result.to_vec());
-            if !from_cache {
-                self.images_cache.push_back((url, result));
-                if self.images_cache.len() > self.max_cache_size {
-                    self.images_cache.pop_front();
-                }
-            }
+            images.push(response?);
         }
         Ok(images)
     }
@@ -251,8 +222,7 @@ impl TryFrom<&String> for URI {
     type Error = Error;
 
     fn try_from(uri: &String) -> Result<Self, Error> {
-        if uri.starts_with("btcfs://") {
-            let body = uri.chars().skip("btcfs://".len()).collect::<String>();
+        if let Some(body) = uri.strip_prefix("btcfs://") {
             let parts: Vec<&str> = body.split('i').collect::<Vec<_>>();
             if parts.len() != 2 {
                 return Err(Error::InvalidOnchainFsuriFormat);
@@ -262,8 +232,8 @@ impl TryFrom<&String> for URI {
                 .parse()
                 .map_err(|_| Error::InvalidOnchainFsuriFormat)?;
             Ok(URI::BTCFS(tx_hash, index))
-        } else if uri.starts_with("ipfs://") {
-            let hash = uri.chars().skip("ipfs://".len()).collect::<String>();
+        } else if let Some(body) = uri.strip_prefix("ipfs://") {
+            let hash = body.to_string();
             Ok(URI::IPFS(hash))
         } else {
             Err(Error::InvalidOnchainFsuriFormat)
@@ -271,9 +241,9 @@ impl TryFrom<&String> for URI {
     }
 }
 
-async fn parse_image_from_btcfs(url: &Url, index: usize) -> Result<Vec<u8>, Error> {
+async fn parse_image_from_btcfs(url: Url, index: usize) -> Result<Vec<u8>, Error> {
     // parse btc transaction
-    let btc_tx = reqwest::get(url.clone())
+    let btc_tx = reqwest::get(url)
         .await
         .map_err(|e| Error::FetchFromBtcNodeError(e.to_string()))?
         .json::<Value>()

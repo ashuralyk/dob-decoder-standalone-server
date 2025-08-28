@@ -8,7 +8,6 @@ use jsonrpsee::{proc_macros::rpc, tracing, types::error::ErrorObjectOwned};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::client::ImageFetchClient;
 use crate::decoder::helpers::{decode_cluster_data, decode_spore_data};
 use crate::decoder::DOBDecoder;
 use crate::svg::DOBSvgExtractor;
@@ -56,11 +55,13 @@ trait DecoderRpc {
 pub struct DecoderStandaloneServer {
     decoder: DOBDecoder,
     cache_expiration: u64,
+    svg_extractor: DOBSvgExtractor,
 }
 
 impl DecoderStandaloneServer {
     pub fn new(decoder: DOBDecoder, cache_expiration: u64) -> Self {
         Self {
+            svg_extractor: DOBSvgExtractor::new(&decoder.setting().image_fetcher_url),
             decoder,
             cache_expiration,
         }
@@ -155,10 +156,7 @@ impl DecoderRpcServer for DecoderStandaloneServer {
             render_output,
             dob_content: _,
         } = serde_json::from_str(&self.decode(hexed_spore_id).await?).unwrap();
-        let image_fetcher = ImageFetchClient::new(&self.decoder.setting().image_fetcher_url, 10);
-        let svg = DOBSvgExtractor::new(render_output, image_fetcher)?
-            .extract_svg()
-            .await?;
+        let svg = self.svg_extractor.extract_svg(render_output).await?;
         Ok(svg)
     }
 
@@ -167,10 +165,12 @@ impl DecoderRpcServer for DecoderStandaloneServer {
         fsuri: String,
         encode_type: Option<String>,
     ) -> Result<String, ErrorObjectOwned> {
-        let mut image_fetcher =
-            ImageFetchClient::new(&self.decoder.setting().image_fetcher_url, 10);
-        let raw_images = image_fetcher.fetch_images(&[fsuri]).await?;
-        let image = raw_images.first().unwrap();
+        let raw_images = self
+            .svg_extractor
+            .get_fetcher()
+            .fetch_images(&[fsuri])
+            .await?;
+        let image = raw_images.first().ok_or(Error::NoImageFound)?;
 
         match encode_type.as_deref() {
             Some("hex") => Ok(hex::encode(image)),
