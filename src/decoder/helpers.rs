@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::SystemTime};
 
 use ckb_jsonrpc_types::Either;
 use ckb_sdk::{constants::TYPE_ID_CODE_HASH, rpc::ckb_indexer::Tx, traits::CellQueryOptions};
@@ -30,6 +30,29 @@ fn build_type_id_search_option(type_id_args: [u8; 32]) -> CellQueryOptions {
 
 fn build_type_script_search_option(type_script: Script) -> CellQueryOptions {
     CellQueryOptions::new_type(type_script)
+}
+
+fn file_older_than_hours(file_path: &PathBuf, hours: u64) -> bool {
+    match std::fs::metadata(file_path) {
+        Ok(metadata) => {
+            let Ok(mut duration) = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) else {
+                return true;
+            };
+            if let Ok(Ok(checkpoint)) = metadata
+                .modified()
+                .map(|time| time.duration_since(SystemTime::UNIX_EPOCH))
+            {
+                duration = duration.saturating_sub(checkpoint);
+            } else if let Ok(Ok(checkpoint)) = metadata
+                .created()
+                .map(|time| time.duration_since(SystemTime::UNIX_EPOCH))
+            {
+                duration = duration.saturating_sub(checkpoint);
+            }
+            duration.as_secs() / 3600 >= hours
+        }
+        Err(_) => true,
+    }
 }
 
 fn build_batch_search_options(
@@ -268,7 +291,7 @@ pub async fn parse_decoder_path(
         DecoderLocationType::TypeId => {
             let hash = decoder.hash.as_ref().ok_or(Error::DecoderHashNotFound)?;
             decoder_path.push(format!("type_id_{}.bin", hex::encode(hash)));
-            if !decoder_path.exists() {
+            if file_older_than_hours(&decoder_path, 24) {
                 let decoder_search_option = build_type_id_search_option(hash.clone().into());
                 let decoder_binary = fetch_decoder_binary(rpc, decoder_search_option).await?;
                 std::fs::write(decoder_path.clone(), decoder_binary)
@@ -285,7 +308,7 @@ pub async fn parse_decoder_path(
                 "type_script_{}.bin",
                 hex::encode(script.calc_script_hash().raw_data())
             ));
-            if !decoder_path.exists() {
+            if file_older_than_hours(&decoder_path, 24) {
                 let decoder_search_option = build_type_script_search_option(script);
                 let decoder_binary = fetch_decoder_binary(rpc, decoder_search_option).await?;
                 std::fs::write(decoder_path.clone(), decoder_binary)
