@@ -32,11 +32,7 @@ fn build_type_script_search_option(type_script: Script) -> CellQueryOptions {
     CellQueryOptions::new_type(type_script)
 }
 
-<<<<<<< HEAD
 fn file_older_than_minutes(file_path: &PathBuf, minutes: u64) -> bool {
-=======
-fn file_older_than_hours(file_path: &PathBuf, hours: u64) -> bool {
->>>>>>> 26d7805 (feat: adjust direction structure of puretext and add 24 hours time expiration for typed decoder)
     match std::fs::metadata(file_path) {
         Ok(metadata) => {
             let Ok(mut duration) = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) else {
@@ -53,11 +49,7 @@ fn file_older_than_hours(file_path: &PathBuf, hours: u64) -> bool {
             {
                 duration = duration.saturating_sub(checkpoint);
             }
-<<<<<<< HEAD
             duration.as_secs() / 60 >= minutes
-=======
-            duration.as_secs() / 3600 >= hours
->>>>>>> 26d7805 (feat: adjust direction structure of puretext and add 24 hours time expiration for typed decoder)
         }
         Err(_) => true,
     }
