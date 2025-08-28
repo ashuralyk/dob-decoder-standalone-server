@@ -1,4 +1,4 @@
-use crate::svg::puretext::{constants::key::Key, SimpleDOBOutput, TraitExt as _};
+use crate::svg::puretext::{constants::Key, SimpleDOBOutput, TraitExt as _};
 
 pub fn get_background_color_by_traits(traits: &[SimpleDOBOutput]) -> Option<&SimpleDOBOutput> {
     traits

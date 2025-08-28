@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 use crate::svg::puretext::{
-    constants::{key::Key, regex::*},
+    constants::{parse_value_to_string, Key, GLOBAL_TEMPLATE_REG, TEMPLATE_REG},
     parsers::{
         background_color_parser, style_parser, BackgroundColorOptions, ParsedStyle,
         ParsedStyleAlignment, ParsedStyleFormat, StyleParserOptions,

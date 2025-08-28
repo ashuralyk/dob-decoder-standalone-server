@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::{
     svg::puretext::{
-        constants::regex::{parse_string_to_array, ARRAY_INDEX_REG, ARRAY_REG},
+        constants::{parse_string_to_array, ARRAY_INDEX_REG, ARRAY_REG},
         SimpleDOBOutput, TraitExt,
     },
     types::{ParsedTrait, StandardDOBOutput},
