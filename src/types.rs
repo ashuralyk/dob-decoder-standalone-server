@@ -289,6 +289,7 @@ pub struct Settings {
     pub decoders_cache_directory: PathBuf,
     pub dobs_cache_directory: PathBuf,
     pub dobs_cache_expiration_sec: u64,
+    pub decoders_cache_expiration_hours: u64,
     pub onchain_decoder_deployment: Vec<OnchainDecoderDeployment>,
     pub available_spores: Vec<ScriptId>,
     pub available_clusters: Vec<ScriptId>,

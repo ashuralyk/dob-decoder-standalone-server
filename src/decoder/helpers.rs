@@ -291,7 +291,7 @@ pub async fn parse_decoder_path(
         DecoderLocationType::TypeId => {
             let hash = decoder.hash.as_ref().ok_or(Error::DecoderHashNotFound)?;
             decoder_path.push(format!("type_id_{}.bin", hex::encode(hash)));
-            if file_older_than_hours(&decoder_path, 24) {
+            if file_older_than_hours(&decoder_path, settings.decoders_cache_expiration_hours) {
                 let decoder_search_option = build_type_id_search_option(hash.clone().into());
                 let decoder_binary = fetch_decoder_binary(rpc, decoder_search_option).await?;
                 std::fs::write(decoder_path.clone(), decoder_binary)
@@ -308,7 +308,7 @@ pub async fn parse_decoder_path(
                 "type_script_{}.bin",
                 hex::encode(script.calc_script_hash().raw_data())
             ));
-            if file_older_than_hours(&decoder_path, 24) {
+            if file_older_than_hours(&decoder_path, settings.decoders_cache_expiration_hours) {
                 let decoder_search_option = build_type_script_search_option(script);
                 let decoder_binary = fetch_decoder_binary(rpc, decoder_search_option).await?;
                 std::fs::write(decoder_path.clone(), decoder_binary)

@@ -158,8 +158,6 @@ pub struct ImageFetchClient {
     base_url: HashMap<String, Url>,
 }
 
-unsafe impl Sync for ImageFetchClient {}
-
 impl ImageFetchClient {
     pub fn new(base_url: &HashMap<String, Url>) -> Self {
         Self {
