@@ -1,6 +1,5 @@
 use ckb_types::{h256, H256};
 
-use crate::client::ImageFetchClient;
 use crate::decoder::{helpers::decode_spore_content, DOBDecoder};
 use crate::svg::puretext::parsers::{dob_output_parser, render_text_params_parser};
 use crate::svg::puretext::render::render_text_parser_result_to_svg;
@@ -200,7 +199,7 @@ async fn test_unicorn_dna_to_svg() {
 #[tokio::test]
 async fn test_fetch_and_decode_mainnet_nervape_dna_to_svg() {
     let settings = prepare_settings(SettingType::Mainnet, vec![]);
-    let image_fetcher = ImageFetchClient::new(&settings.image_fetcher_url, 10);
+    let svg_extractor = DOBSvgExtractor::new(&settings.image_fetcher_url);
     let decoder = DOBDecoder::new(settings);
     let (_, dna, dob_metadata) = decoder
         .fetch_decode_ingredients(MAINNET_NERVAPE_SPORE_ID.into())
@@ -211,8 +210,7 @@ async fn test_fetch_and_decode_mainnet_nervape_dna_to_svg() {
         // array type
         .await
         .expect("decode");
-    let svg_extractor = DOBSvgExtractor::new(render_result, image_fetcher).unwrap();
-    let svg_content = svg_extractor.extract_svg().await.unwrap();
+    let svg_content = svg_extractor.extract_svg(render_result).await.unwrap();
     println!("svg_content: {svg_content}");
 }
 
@@ -312,7 +310,7 @@ fn test_manual_render_output_to_svg() {
 #[tokio::test]
 async fn test_decode_mainnet_unicorn_to_svg() {
     let settings = prepare_settings(SettingType::Mainnet, vec![]);
-    let image_fetcher = ImageFetchClient::new(&settings.image_fetcher_url, 10);
+    let svg_extractor = DOBSvgExtractor::new(&settings.image_fetcher_url);
     let decoder = DOBDecoder::new(settings);
     let (_, dna, dob_metadata) = decoder
         .fetch_decode_ingredients(UNICORN_SPORE_ID.into())
@@ -322,7 +320,6 @@ async fn test_decode_mainnet_unicorn_to_svg() {
         .decode_dna(&dna, dob_metadata)
         .await
         .expect("decode");
-    let svg_extractor = DOBSvgExtractor::new(render_result, image_fetcher).unwrap();
-    let svg_content = svg_extractor.extract_svg().await.unwrap();
+    let svg_content = svg_extractor.extract_svg(render_result).await.unwrap();
     println!("svg_content: {svg_content}");
 }

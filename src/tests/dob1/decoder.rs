@@ -2,7 +2,6 @@ use ckb_types::h256;
 use serde_json::{json, Value};
 
 use crate::{
-    client::ImageFetchClient,
     decoder::DOBDecoder,
     svg::DOBSvgExtractor,
     tests::{prepare_settings, SettingType},
@@ -73,12 +72,11 @@ async fn test_dob1_basic_decode() {
 #[tokio::test]
 async fn test_mainnet_dob1_decode_to_svg() {
     let settings = prepare_settings(SettingType::Mainnet, vec![]);
-    let image_fetcher = ImageFetchClient::new(&settings.image_fetcher_url, 10);
+    let svg_extractor = DOBSvgExtractor::new(&settings.image_fetcher_url);
     let (content, dob_metadata) = generate_dob1_ingredients();
     let decoder = DOBDecoder::new(settings);
     let dna = content.get("dna").unwrap().as_str().unwrap();
     let render_result = decoder.decode_dna(dna, dob_metadata).await.expect("decode");
-    let svg_extractor = DOBSvgExtractor::new(render_result, image_fetcher).unwrap();
-    let svg_content = svg_extractor.extract_svg().await.unwrap();
+    let svg_content = svg_extractor.extract_svg(render_result).await.unwrap();
     println!("svg_content: {svg_content}");
 }

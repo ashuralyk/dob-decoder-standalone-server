@@ -103,9 +103,8 @@ pub fn decode_spore_content(content: &[u8]) -> Result<(Value, String), Error> {
         return Ok((serde_json::Value::String(dna.clone()), dna));
     }
 
-    let value: Value = serde_json::from_slice(content).unwrap_or(Value::String(
-        String::from_utf8(content.to_vec()).expect("raw string content"),
-    ));
+    let value: Value = serde_json::from_slice(content)
+        .unwrap_or(Value::String(String::from_utf8_lossy(content).to_string()));
     let dna = match &value {
         serde_json::Value::String(_) => &value,
         serde_json::Value::Array(array) => array.first().ok_or(Error::DOBContentUnexpected)?,

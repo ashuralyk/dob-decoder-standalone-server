@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use base64::{engine::general_purpose::STANDARD, Engine};
 use lazy_regex::regex;
+use reqwest::Url;
 use serde_json::Value;
 
 use crate::{
@@ -81,35 +84,39 @@ pub fn detect_image_mime_type(hex_content: String) -> Option<&'static str> {
 
 pub struct DOBSvgExtractor {
     fetcher: ImageFetchClient,
-    parsed_dob: Vec<StandardDOBOutput>,
 }
 
 impl DOBSvgExtractor {
-    pub fn new(dob_render_output: String, fetcher: ImageFetchClient) -> Result<Self, Error> {
-        let parsed_dob: Vec<StandardDOBOutput> =
-            serde_json::from_str(&dob_render_output).map_err(|_| Error::DOBRenderOutputInvalid)?;
-        Ok(Self {
-            fetcher,
-            parsed_dob,
-        })
+    pub fn new(base_url: &HashMap<String, Url>) -> Self {
+        Self {
+            fetcher: ImageFetchClient::new(base_url),
+        }
     }
 
-    pub async fn extract_svg(mut self) -> Result<String, Error> {
-        if let Some(svg) = self.extract_svg_from_dob0().await? {
-            return Ok(svg);
+    pub fn get_fetcher(&self) -> &ImageFetchClient {
+        &self.fetcher
+    }
+
+    pub async fn extract_svg(&self, dob_render_output: String) -> Result<String, Error> {
+        let parsed_dob: Vec<StandardDOBOutput> =
+            serde_json::from_str(&dob_render_output).map_err(|_| Error::DOBRenderOutputInvalid)?;
+
+        if let Some(dob0_svg) = self.extract_png_svg_from_dob0(&parsed_dob).await? {
+            return Ok(dob0_svg);
         }
 
-        if let Some(dob1_svg) = self.extract_svg_from_dob1().await? {
+        if let Some(dob1_svg) = self.extract_png_svg_from_dob1(&parsed_dob).await? {
             return Ok(dob1_svg);
         }
 
-        let text_svg = self.extract_svg_from_dob0_text()?;
-
-        Ok(text_svg)
+        self.extract_text_svg_from_dob0(&parsed_dob)
     }
 
-    async fn extract_svg_from_dob0(&mut self) -> Result<Option<String>, Error> {
-        let fsurl = self.parsed_dob.iter().find_map(|dob| {
+    async fn extract_png_svg_from_dob0(
+        &self,
+        parsed_dob: &[StandardDOBOutput],
+    ) -> Result<Option<String>, Error> {
+        let fsurl = parsed_dob.iter().find_map(|dob| {
             if dob.name == DOB0_TRAIT_NAME {
                 if let Some(dob_trait) = dob.traits.iter().find(|value| value.type_ == "String") {
                     if let Value::String(fsurl) = &dob_trait.value {
@@ -126,7 +133,9 @@ impl DOBSvgExtractor {
                 .fetcher
                 .fetch_images(&[dob0_fsurl.clone()])
                 .await?
-                .remove(0);
+                .into_iter()
+                .next()
+                .ok_or(Error::FetchFromIpfsError("No image found".to_string()))?;
             let Some(image_mime_type) = detect_image_mime_type(hex::encode(&image_content)) else {
                 return Ok(None);
             };
@@ -140,8 +149,11 @@ impl DOBSvgExtractor {
         }
     }
 
-    async fn extract_svg_from_dob1(&mut self) -> Result<Option<String>, Error> {
-        let svg = self.parsed_dob.iter().find_map(|dob| {
+    async fn extract_png_svg_from_dob1(
+        &self,
+        parsed_dob: &[StandardDOBOutput],
+    ) -> Result<Option<String>, Error> {
+        let svg = parsed_dob.iter().find_map(|dob| {
             if dob.name == DOB1_TRAIT_NAME {
                 if let Some(dob_trait) = dob.traits.iter().find(|value| value.type_ == "SVG") {
                     if let Value::String(svg) = &dob_trait.value {
@@ -158,8 +170,11 @@ impl DOBSvgExtractor {
         }
     }
 
-    fn extract_svg_from_dob0_text(&mut self) -> Result<String, Error> {
-        let dob_output_result = dob_output_parser(&self.parsed_dob);
+    fn extract_text_svg_from_dob0(
+        &self,
+        parsed_dob: &[StandardDOBOutput],
+    ) -> Result<String, Error> {
+        let dob_output_result = dob_output_parser(parsed_dob);
         let text_render_result = render_text_params_parser(
             &dob_output_result.traits,
             &dob_output_result.index_var_register,
@@ -169,12 +184,10 @@ impl DOBSvgExtractor {
         Ok(svg)
     }
 
-    async fn replace_svg_fsurls(&mut self, svg_content: String) -> Result<Option<String>, Error> {
+    async fn replace_svg_fsurls(&self, mut svg_content: String) -> Result<Option<String>, Error> {
         // Create regex patterns to match btcfs:// and ipfs:// URLs in href attributes
         let btcfs_pattern = regex!(r#"href='btcfs://([^']+)'"#);
         let ipfs_pattern = regex!(r#"href='ipfs://([^']+)'"#);
-
-        let mut processed_svg = svg_content.clone();
 
         // Find all btcfs URLs
         let btcfs_urls: Vec<String> = btcfs_pattern
@@ -211,9 +224,9 @@ impl DOBSvgExtractor {
             // Replace the URL in the SVG
             let old_href = format!("href='{}'", url);
             let new_href = format!("href='{}'", data_url);
-            processed_svg = processed_svg.replace(&old_href, &new_href);
+            svg_content = svg_content.replace(&old_href, &new_href);
         }
 
-        Ok(Some(processed_svg))
+        Ok(Some(svg_content))
     }
 }
