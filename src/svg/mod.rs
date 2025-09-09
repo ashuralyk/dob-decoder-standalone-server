@@ -17,6 +17,7 @@ use crate::{
 pub mod puretext;
 
 const DOB0_TRAIT_NAME: &str = "prev.bg";
+const DOB0_BGCOLOR_NAME: &str = "prev.bgcolor";
 const DOB1_TRAIT_NAME: &str = "IMAGE";
 
 pub const DEFAULT_SIZE: u32 = 500;
@@ -130,6 +131,16 @@ impl DOBSvgExtractor {
             }
             None
         });
+        let bgcolor = parsed_dob.iter().find_map(|dob| {
+            if dob.name == DOB0_BGCOLOR_NAME {
+                if let Some(dob_trait) = dob.traits.iter().find(|value| value.type_ == "String") {
+                    if let Value::String(bgcolor) = &dob_trait.value {
+                        return Some(bgcolor.as_str());
+                    }
+                }
+            }
+            None
+        });
         if let Some(dob0_fsurl) = fsurl {
             let image_content = self
                 .fetcher
@@ -142,8 +153,9 @@ impl DOBSvgExtractor {
                 return Ok(None);
             };
             let image_content_base64 = STANDARD.encode(&image_content);
+            let bgcolor = bgcolor.unwrap_or("#000");
             let svg_content = format!(
-                r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" width="{DEFAULT_SIZE}" height="{DEFAULT_SIZE}" viewBox="0 0 {DEFAULT_SIZE} {DEFAULT_SIZE}" version="1.1"><image width="{DEFAULT_SIZE}" height="{DEFAULT_SIZE}" href="data:{image_mime_type};base64,{image_content_base64}" preserveAspectRatio="xMidYMid slice" /></svg>"#
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?><svg xmlns="http://www.w3.org/2000/svg" width="{DEFAULT_SIZE}" height="{DEFAULT_SIZE}" viewBox="0 0 {DEFAULT_SIZE} {DEFAULT_SIZE}" version="1.1"><style>svg {{ background-color: {bgcolor}; }}</style><image width="{DEFAULT_SIZE}" height="{DEFAULT_SIZE}" href="data:{image_mime_type};base64,{image_content_base64}" preserveAspectRatio="xMidYMid slice" /></svg>"#
             );
             Ok(Some(svg_content))
         } else {
