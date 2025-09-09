@@ -155,7 +155,8 @@ impl DecoderRpcServer for DecoderStandaloneServer {
         let ServerDecodeResult {
             render_output,
             dob_content: _,
-        } = serde_json::from_str(&self.decode(hexed_spore_id).await?).unwrap();
+        } = serde_json::from_str(&self.decode(hexed_spore_id).await?)
+            .map_err(|e| ErrorObjectOwned::owned(-1, e.to_string(), None::<()>))?;
         let svg = self.svg_extractor.extract_svg(render_output).await?;
         Ok(svg)
     }
@@ -173,12 +174,12 @@ impl DecoderRpcServer for DecoderStandaloneServer {
         let image = raw_images.first().ok_or(Error::NoImageFound)?;
 
         match encode_type.as_deref() {
-            Some("hex") => Ok(hex::encode(image)),
+            Some("hex") | None => Ok(hex::encode(image)),
             Some("base64") => Ok(STANDARD.encode(image)),
             unknown => Err(ErrorObjectOwned::owned::<serde_json::Value>(
                 -1,
                 format!(
-                    "Unknown encode type: {}. Supported types: 'base64', 'hex'",
+                    "Unknown encode type: {}. Supported types: 'base64', 'hex' (default)",
                     unknown.unwrap_or("unknown")
                 ),
                 None,
