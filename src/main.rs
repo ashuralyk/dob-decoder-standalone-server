@@ -1,7 +1,8 @@
 use std::fs;
 
-use jsonrpsee::{server::ServerBuilder, tracing};
+use jsonrpsee::{server::Server, tracing};
 use server::DecoderRpcServer;
+use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
 mod client;
@@ -31,8 +32,13 @@ async fn main() {
     let decoder = decoder::DOBDecoder::new(settings);
 
     tracing::info!("running decoder server at {}", rpc_server_address);
-    let http_server = ServerBuilder::new()
-        .http_only()
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+    let http_middleware = tower::ServiceBuilder::new().layer(cors);
+    let http_server = Server::builder()
+        .set_http_middleware(http_middleware)
         .build(rpc_server_address)
         .await
         .expect("build http_server");
