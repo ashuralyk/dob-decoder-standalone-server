@@ -198,7 +198,7 @@ fn generate_svg(elements: &[RenderElement], bg_color: &str) -> String {
 
     // Create the complete SVG
     format!(
-        r#"<svg width="{}" height="{}" xmlns="http://www.w3.org/2000/svg">{}{}{}{}</svg>"#,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}">{}{}{}{}</svg>"#,
         width, height, font_defs, gradient_defs, background_rect, svg_content
     )
 }
