@@ -275,7 +275,8 @@ async fn parse_image_from_btcfs(url: Url, index: usize) -> Result<Vec<u8>, Error
     let mut images = vec![];
     let mut witness_view = witness.as_str();
     const HEADER: &str = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 696d6167652f706e67 OP_0 OP_PUSHDATA2 ";
-    while let (Some(start), Some(end)) = (witness.find("OP_IF"), witness.find("OP_ENDIF")) {
+    while let (Some(start), Some(end)) = (witness_view.find("OP_IF"), witness_view.find("OP_ENDIF"))
+    {
         if start >= end {
             return Err(Error::InvalidInscriptionFormat);
         }
