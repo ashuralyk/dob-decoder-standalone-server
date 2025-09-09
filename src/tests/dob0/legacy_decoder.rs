@@ -19,6 +19,8 @@ const MAINNET_NERVAPE_SPORE_ID: H256 =
     h256!("0xbbe57f0e7f7ca6e6c59007b28150e39c9c6f5c209493801cfc9ef125e0937ed4");
 const UNICORN_SPORE_ID: H256 =
     h256!("0xe5bd5bbf82fec9107ba86fb65b3756915ca0d3a28d5e13a0aa82269b62a129ef");
+const MAINNET_WORLD3_SPORE_ID: H256 =
+    h256!("0xd1b01eda64c924ffe83a8d7d6511ceb56dcde9d52722e9d2df3f2db3c13f1fda");
 
 fn generate_nervape_dob_ingredients(onchain_decoder: bool) -> (Value, ClusterDescriptionField) {
     let nervape_content = json!({
@@ -307,13 +309,12 @@ fn test_manual_render_output_to_svg() {
     println!("\nGenerated SVG:\n{}", svg);
 }
 
-#[tokio::test]
-async fn test_decode_mainnet_unicorn_to_svg() {
-    let settings = prepare_settings(SettingType::Mainnet, vec![]);
+async fn decode_svg(network: SettingType, spore_id: H256) -> String {
+    let settings = prepare_settings(network, vec![]);
     let svg_extractor = DOBSvgExtractor::new(&settings.image_fetcher_url);
     let decoder = DOBDecoder::new(settings);
     let (_, dna, dob_metadata) = decoder
-        .fetch_decode_ingredients(UNICORN_SPORE_ID.into())
+        .fetch_decode_ingredients(spore_id.into())
         .await
         .expect("fetch");
     let render_result = decoder
@@ -321,5 +322,18 @@ async fn test_decode_mainnet_unicorn_to_svg() {
         .await
         .expect("decode");
     let svg_content = svg_extractor.extract_svg(render_result).await.unwrap();
+    svg_content
+}
+
+#[tokio::test]
+async fn test_decode_mainnet_unicorn_to_svg() {
+    let svg_content = decode_svg(SettingType::Mainnet, UNICORN_SPORE_ID).await;
+    println!("svg_content: {svg_content}");
+}
+
+#[tokio::test]
+async fn test_decode_mainnet_world3_to_svg() {
+    let svg_content = decode_svg(SettingType::Mainnet, MAINNET_WORLD3_SPORE_ID).await;
+    std::fs::write("world3.svg", &svg_content).unwrap();
     println!("svg_content: {svg_content}");
 }

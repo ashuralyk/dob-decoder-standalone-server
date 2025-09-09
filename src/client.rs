@@ -199,6 +199,21 @@ impl ImageFetchClient {
                         .boxed(),
                     );
                 }
+                URI::Http(url) => {
+                    requests.push(
+                        async move {
+                            let image = reqwest::get(url.clone())
+                                .await
+                                .map_err(|e| Error::FetchFromIpfsError(e.to_string()))?
+                                .bytes()
+                                .await
+                                .map_err(|e| Error::FetchFromIpfsError(e.to_string()))?
+                                .to_vec();
+                            Ok(image)
+                        }
+                        .boxed(),
+                    );
+                }
             }
         }
         let mut images = vec![];
@@ -214,6 +229,7 @@ impl ImageFetchClient {
 enum URI {
     BTCFS(String, usize),
     IPFS(String),
+    Http(String),
 }
 
 impl TryFrom<&String> for URI {
@@ -233,6 +249,8 @@ impl TryFrom<&String> for URI {
         } else if let Some(body) = uri.strip_prefix("ipfs://") {
             let hash = body.to_string();
             Ok(URI::IPFS(hash))
+        } else if uri.starts_with("http") {
+            Ok(URI::Http(uri.clone()))
         } else {
             Err(Error::InvalidOnchainFsuriFormat)
         }

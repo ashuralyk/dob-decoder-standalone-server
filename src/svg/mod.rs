@@ -119,7 +119,10 @@ impl DOBSvgExtractor {
             if dob.name == DOB0_TRAIT_NAME {
                 if let Some(dob_trait) = dob.traits.iter().find(|value| value.type_ == "String") {
                     if let Value::String(fsurl) = &dob_trait.value {
-                        if fsurl.starts_with("btcfs://") || fsurl.starts_with("ipfs://") {
+                        if fsurl.starts_with("btcfs://")
+                            || fsurl.starts_with("ipfs://")
+                            || fsurl.starts_with("http")
+                        {
                             return Some(fsurl);
                         }
                     }
