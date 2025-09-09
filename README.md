@@ -74,7 +74,7 @@ $ echo '{
     "jsonrpc": "2.0",
     "method": "dob_decode_svg",
     "params": [
-        "bbe57f0e7f7ca6e6c59007b28150e39c9c6f5c209493801cfc9ef125e0937ed4"
+        "0x577bf0de0dcffe2811fa827480a700bc800c8e1e9606615b1484baeea2cba830"
     ]
 }' \
 | curl -H 'content-type: application/json' -d @- \
@@ -85,7 +85,7 @@ http://localhost:8090
 
 ```bash
 $ echo '{
-    "id": 3,
+    "id": 4,
     "jsonrpc": "2.0",
     "method": "dob_extract_image_from_fsuri",
     "params": [

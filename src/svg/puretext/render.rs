@@ -1,4 +1,7 @@
-use crate::svg::puretext::parsers::{ParsedStyleAlignment, TextItem, TextParserResult};
+use crate::svg::{
+    puretext::parsers::{ParsedStyleAlignment, TextItem, TextParserResult},
+    DEFAULT_SIZE,
+};
 
 #[derive(Debug, Clone)]
 pub struct RenderProps {
@@ -107,7 +110,7 @@ fn convert_items_to_elements(items: &[TextItem]) -> Vec<RenderElement> {
 }
 
 fn generate_svg(elements: &[RenderElement], bg_color: &str) -> String {
-    let width = 500;
+    let width = DEFAULT_SIZE;
     let padding_x = 20;
     let padding_y = 30;
     let line_height = 27;
@@ -119,7 +122,7 @@ fn generate_svg(elements: &[RenderElement], bg_color: &str) -> String {
 
     // Calculate dynamic height based on content with minimum of 500
     let calculated_height = elements.len() * line_height + padding_y + 10;
-    let height = std::cmp::max(calculated_height as u32, 500);
+    let height = std::cmp::max(calculated_height as u32, DEFAULT_SIZE);
 
     // First pass: collect used font weights
     for element in elements {

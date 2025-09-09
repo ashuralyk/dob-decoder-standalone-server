@@ -260,7 +260,7 @@ async fn parse_image_from_btcfs(url: Url, index: usize) -> Result<Vec<u8>, Error
         .ok_or(Error::InvalidBtcTransactionFormat(
             "vin is empty".to_string(),
         ))?;
-    let mut witness = vin
+    let witness = vin
         .get("inner_witnessscript_asm")
         .ok_or(Error::InvalidBtcTransactionFormat(
             "inner_witnessscript_asm not found".to_string(),
@@ -273,18 +273,22 @@ async fn parse_image_from_btcfs(url: Url, index: usize) -> Result<Vec<u8>, Error
 
     // parse inscription body
     let mut images = vec![];
-    let header = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 696d6167652f706e67 OP_0 OP_PUSHDATA2 ";
+    let mut witness_view = witness.as_str();
+    const HEADER: &str = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 696d6167652f706e67 OP_0 OP_PUSHDATA2 ";
     while let (Some(start), Some(end)) = (witness.find("OP_IF"), witness.find("OP_ENDIF")) {
-        let inscription = &witness[start..end + "OP_ENDIF".len()];
-        if !inscription.contains(header) {
+        if start >= end {
             return Err(Error::InvalidInscriptionFormat);
         }
-        let base_removed = inscription.replace(header, "");
+        let inscription = &witness_view[start..end + "OP_ENDIF".len()];
+        if !inscription.contains(HEADER) {
+            return Err(Error::InvalidInscriptionFormat);
+        }
+        let base_removed = inscription.replace(HEADER, "");
         let hexed = regex_replace_all!(r#"\s?OP\_\w+\s?"#, &base_removed, "");
         let image =
             hex::decode(hexed.as_bytes()).map_err(|_| Error::InvalidInscriptionContentHexFormat)?;
         images.push(image);
-        witness = witness[end + "OP_ENDIF".len()..].to_owned();
+        witness_view = &witness_view[end + "OP_ENDIF".len()..];
     }
     if images.is_empty() {
         return Err(Error::EmptyInscriptionContent);
