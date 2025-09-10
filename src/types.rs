@@ -94,6 +94,8 @@ pub enum Error {
     FsuriNotFoundInConfig,
     #[error("IPFS Gateway responsed badly with error: {0}")]
     FetchFromIpfsError(String),
+    #[error("HTTP(S) responsed badly with error: {0}")]
+    FetchFromHttpError(String),
     #[error("No image found")]
     NoImageFound,
     #[error("DOB render output is not in format of DOB protocol")]

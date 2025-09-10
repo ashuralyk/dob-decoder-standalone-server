@@ -11,8 +11,9 @@ use ckb_sdk::rpc::ckb_indexer::{Cell, Order, Pagination, SearchKey, Tx};
 use ckb_types::H256;
 use jsonrpc_core::futures::FutureExt;
 use lazy_regex::regex_replace_all;
-use reqwest::{Client, Url};
+use reqwest::{Client, ClientBuilder, Url};
 use serde_json::Value;
+use std::time::Duration;
 
 use crate::types::Error;
 
@@ -156,12 +157,21 @@ impl RpcClient {
 
 pub struct ImageFetchClient {
     base_url: HashMap<String, Url>,
+    client: Client,
 }
 
 impl ImageFetchClient {
     pub fn new(base_url: &HashMap<String, Url>) -> Self {
+        let client = ClientBuilder::new()
+            .timeout(Duration::from_secs(30)) // 30 seconds timeout
+            .connect_timeout(Duration::from_secs(10)) // 10 seconds connection timeout
+            .danger_accept_invalid_certs(true) // Bypass SSL certificate verification
+            .build()
+            .expect("Failed to create HTTP client");
+
         Self {
             base_url: base_url.clone(),
+            client,
         }
     }
 
@@ -200,14 +210,68 @@ impl ImageFetchClient {
                     );
                 }
                 URI::Http(url) => {
+                    let client = self.client.clone();
                     requests.push(
                         async move {
-                            let image = reqwest::get(url.clone())
-                                .await
-                                .map_err(|e| Error::FetchFromIpfsError(e.to_string()))?
+                            let response = client.get(url.clone()).send().await.map_err(|e| {
+                                Error::FetchFromHttpError(format!("HTTP request failed: {}", e))
+                            })?;
+
+                            if !response.status().is_success() {
+                                return Err(Error::FetchFromHttpError(format!(
+                                    "HTTP request failed with status: {}",
+                                    response.status()
+                                )));
+                            }
+
+                            let image = response
                                 .bytes()
                                 .await
-                                .map_err(|e| Error::FetchFromIpfsError(e.to_string()))?
+                                .map_err(|e| {
+                                    Error::FetchFromHttpError(format!(
+                                        "Failed to read response body: {}",
+                                        e
+                                    ))
+                                })?
+                                .to_vec();
+                            Ok(image)
+                        }
+                        .boxed(),
+                    );
+                }
+                URI::Https(url) => {
+                    let client = self.client.clone();
+                    requests.push(
+                        async move {
+                            let response = client.get(url.clone()).send().await.map_err(|e| {
+                                let error_msg = if e.is_connect() {
+                                    format!("HTTPS connection failed: {}", e)
+                                } else if e.is_timeout() {
+                                    format!("HTTPS request timeout: {}", e)
+                                } else if e.is_request() {
+                                    format!("HTTPS request error: {}", e)
+                                } else {
+                                    format!("HTTPS error: {}", e)
+                                };
+                                Error::FetchFromHttpError(error_msg)
+                            })?;
+
+                            if !response.status().is_success() {
+                                return Err(Error::FetchFromHttpError(format!(
+                                    "HTTPS request failed with status: {}",
+                                    response.status()
+                                )));
+                            }
+
+                            let image = response
+                                .bytes()
+                                .await
+                                .map_err(|e| {
+                                    Error::FetchFromHttpError(format!(
+                                        "Failed to read HTTPS response body: {}",
+                                        e
+                                    ))
+                                })?
                                 .to_vec();
                             Ok(image)
                         }
@@ -230,6 +294,7 @@ enum URI {
     BTCFS(String, usize),
     IPFS(String),
     Http(String),
+    Https(String),
 }
 
 impl TryFrom<&String> for URI {
@@ -249,6 +314,8 @@ impl TryFrom<&String> for URI {
         } else if let Some(body) = uri.strip_prefix("ipfs://") {
             let hash = body.to_string();
             Ok(URI::IPFS(hash))
+        } else if uri.starts_with("https") {
+            Ok(URI::Https(uri.clone()))
         } else if uri.starts_with("http") {
             Ok(URI::Http(uri.clone()))
         } else {
