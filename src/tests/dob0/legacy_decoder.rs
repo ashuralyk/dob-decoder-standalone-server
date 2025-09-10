@@ -21,6 +21,8 @@ const UNICORN_SPORE_ID: H256 =
     h256!("0xe5bd5bbf82fec9107ba86fb65b3756915ca0d3a28d5e13a0aa82269b62a129ef");
 const MAINNET_WORLD3_SPORE_ID: H256 =
     h256!("0xd1b01eda64c924ffe83a8d7d6511ceb56dcde9d52722e9d2df3f2db3c13f1fda");
+const TESTNET_UNICORN_PNG_SPORE_ID: H256 =
+    h256!("0xe6b003cdbb042eff3b56fdceee725b42f9397b9044b8323056f283161c828357");
 
 fn generate_nervape_dob_ingredients(onchain_decoder: bool) -> (Value, ClusterDescriptionField) {
     let nervape_content = json!({
@@ -335,5 +337,12 @@ async fn test_decode_mainnet_unicorn_to_svg() {
 async fn test_decode_mainnet_world3_to_svg() {
     let svg_content = decode_svg(SettingType::Mainnet, MAINNET_WORLD3_SPORE_ID).await;
     std::fs::write("world3.svg", &svg_content).unwrap();
+    println!("svg_content: {svg_content}");
+}
+
+#[tokio::test]
+async fn test_decode_testnet_unicorn_png_to_svg() {
+    let svg_content = decode_svg(SettingType::Testnet, TESTNET_UNICORN_PNG_SPORE_ID).await;
+    std::fs::write("unicorn_png.svg", &svg_content).unwrap();
     println!("svg_content: {svg_content}");
 }
