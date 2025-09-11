@@ -1,4 +1,5 @@
 use crate::svg::{
+    puretext::font::path::pathify_svg_texts,
     puretext::parsers::{ParsedStyleAlignment, TextItem, TextParserResult},
     DEFAULT_SIZE,
 };
@@ -113,34 +114,17 @@ fn generate_svg(elements: &[RenderElement], bg_color: &str) -> String {
     let width = DEFAULT_SIZE;
     let padding_x = 20;
     let padding_y = 30;
-    let line_height = 27;
+    let line_height = 28;
     let font_size = 36;
 
     let mut svg_content = String::new();
-    let mut current_y = padding_y + line_height; // Start after top padding
-    let mut used_font_weights = std::collections::HashSet::new();
+    let mut current_y = padding_y; // Start after top padding
 
     // Calculate dynamic height based on content with minimum of 500
-    let calculated_height = elements.len() * line_height + padding_y + 10;
+    let calculated_height = elements.len() * line_height + padding_y;
     let height = std::cmp::max(calculated_height as u32, DEFAULT_SIZE);
 
-    // First pass: collect used font weights
-    for element in elements {
-        if element.element_type == "p" {
-            let font_weight_to_use = if let Some(font_weight) = &element.props.style.font_weight {
-                if font_weight == "bold" {
-                    "700"
-                } else {
-                    "400"
-                }
-            } else {
-                "400"
-            };
-            used_font_weights.insert(font_weight_to_use.to_string());
-        }
-    }
-
-    // Second pass: generate SVG content
+    // Generate SVG content
     for element in elements {
         if element.element_type == "p" {
             if !element.props.children.is_empty() {
@@ -163,7 +147,7 @@ fn generate_svg(elements: &[RenderElement], bg_color: &str) -> String {
                         };
 
                     let text_element = format!(
-                        r#"<text x="{}" y="{}" font-family="Turret Road" font-weight="{}" font-size="{}" fill="{}" text-anchor="{}">{}</text>"#,
+                        r#"<text x="{}" y="{}" font-weight="{}" font-size="{}" fill="{}" text-anchor="{}">{}</text>"#,
                         padding_x,
                         current_y,
                         font_weight_to_use,
@@ -174,7 +158,6 @@ fn generate_svg(elements: &[RenderElement], bg_color: &str) -> String {
                     );
 
                     svg_content.push_str(&text_element);
-                    svg_content.push('\n');
                 }
             }
             current_y += line_height;
@@ -182,7 +165,7 @@ fn generate_svg(elements: &[RenderElement], bg_color: &str) -> String {
     }
 
     // Create font definitions with only used weights
-    let font_defs = create_font_definitions(&used_font_weights);
+    // let font_defs = create_font_definitions(&used_font_weights);
 
     // Create gradient definition if bg_color is a gradient
     let (background_rect, gradient_defs) = if bg_color.starts_with("linear-gradient") {
@@ -197,10 +180,13 @@ fn generate_svg(elements: &[RenderElement], bg_color: &str) -> String {
     };
 
     // Create the complete SVG
-    format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}">{}{}{}{}</svg>"#,
-        width, height, font_defs, gradient_defs, background_rect, svg_content
-    )
+    let svg_with_text = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}">{}{}{}</svg>"#,
+        width, height, gradient_defs, background_rect, svg_content
+    );
+
+    // Convert text elements to paths to avoid font loading issues
+    pathify_svg_texts(&svg_with_text)
 }
 
 fn create_gradient_background(gradient_css: &str, width: u32, height: u32) -> (String, String) {
@@ -241,46 +227,6 @@ fn create_gradient_background(gradient_css: &str, width: u32, height: u32) -> (S
     );
 
     (background_rect, gradient_defs)
-}
-
-fn create_font_definitions(_used_font_weights: &std::collections::HashSet<String>) -> String {
-    // Include the complete Google Fonts CSS for Turret Road font
-    // This is the actual CSS fetched from: https://fonts.googleapis.com/css2?family=Turret+Road:wght@200;300;400;500;700;800&display=swap
-    let mut font_defs = String::from(r#"<defs><style>"#);
-
-    // Add the complete Google Fonts CSS
-    font_defs.push_str(
-        r#"
-@font-face {
-    font-family: 'Turret Road';
-    font-style: normal;
-    font-weight: 400;
-    font-display: swap;
-    src: url(https://fonts.gstatic.com/s/turretroad/v10/pxiAypMgpcBFjE84Zv-fE3tF.ttf) format('truetype');
-}
-@font-face {
-    font-family: 'Turret Road';
-    font-style: normal;
-    font-weight: 700;
-    font-display: swap;
-    src: url(https://fonts.gstatic.com/s/turretroad/v10/pxidypMgpcBFjE84Zv-fE0P5FdeL.ttf) format('truetype');
-}"#,
-    );
-
-    // Add the text element styling to enable the font
-    font_defs.push_str(
-        r#"
-text {
-    font-family: "Turret Road";
-}"#,
-    );
-
-    font_defs.push_str(
-        r#"
-</style></defs>"#,
-    );
-
-    font_defs
 }
 
 fn calculate_gradient_coordinates(angle: f64) -> (String, String, String, String) {
