@@ -43,7 +43,11 @@ async fn main() {
     let cache_expiration = settings.dobs_cache_expiration_sec;
     let decoder = decoder::DOBDecoder::new(settings);
 
-    tracing::info!("running decoder server at {}", rpc_server_address);
+    // Create the decoder server instance
+    let decoder_server = server::DecoderStandaloneServer::new(decoder, cache_expiration);
+
+    // Start JSON-RPC server
+    tracing::info!("running JSON-RPC decoder server at {}", rpc_server_address);
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
@@ -51,14 +55,54 @@ async fn main() {
     let http_middleware = tower::ServiceBuilder::new().layer(cors);
     let http_server = Server::builder()
         .set_http_middleware(http_middleware)
-        .build(rpc_server_address)
+        .build(rpc_server_address.clone())
         .await
         .expect("build http_server");
 
-    let rpc_methods = server::DecoderStandaloneServer::new(decoder, cache_expiration);
-    let handler = http_server.start(rpc_methods.into_rpc());
+    let rpc_handler = http_server.start(decoder_server.clone().into_rpc());
 
-    tokio::signal::ctrl_c().await.unwrap();
-    tracing::info!("stopping decoder server");
-    handler.stop().unwrap();
+    // Start RESTful API server
+    #[cfg(feature = "axum")]
+    {
+        let restful_address = "127.0.0.1:8090";
+        tracing::info!("running RESTful API server at {}", restful_address);
+
+        let app =
+            server::DecoderStandaloneServer::create_restful_routes().with_state(decoder_server);
+
+        let restful_listener = tokio::net::TcpListener::bind(restful_address)
+            .await
+            .expect("Failed to bind RESTful server");
+
+        let restful_handle = tokio::spawn(async move {
+            axum::serve(restful_listener, app)
+                .await
+                .expect("RESTful server failed");
+        });
+
+        tracing::info!("Both JSON-RPC and RESTful API servers are running");
+        tracing::info!("JSON-RPC server: {}", rpc_server_address);
+        tracing::info!("RESTful API server: {}", restful_address);
+        tracing::info!("Example RESTful endpoints:");
+        tracing::info!(
+            "  GET http://{}/dob_decode_svg/0x<spore_id>",
+            restful_address
+        );
+        tracing::info!("  GET http://{}/dob_decode/0x<spore_id>", restful_address);
+        tracing::info!("  GET http://{}/protocol_versions", restful_address);
+
+        tokio::signal::ctrl_c().await.unwrap();
+        tracing::info!("stopping both servers");
+
+        restful_handle.abort();
+        rpc_handler.stop().unwrap();
+    }
+
+    #[cfg(not(feature = "axum"))]
+    {
+        tracing::info!("RESTful API not available (axum feature not enabled)");
+        tokio::signal::ctrl_c().await.unwrap();
+        tracing::info!("stopping JSON-RPC server");
+        rpc_handler.stop().unwrap();
+    }
 }

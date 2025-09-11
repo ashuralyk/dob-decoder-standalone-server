@@ -82,6 +82,7 @@ pub fn detect_image_mime_type(hex_content: String) -> Option<&'static str> {
     None
 }
 
+#[derive(Clone)]
 pub struct DOBSvgExtractor {
     fetcher: ImageFetchClient,
 }
