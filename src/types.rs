@@ -235,6 +235,7 @@ pub struct DOBDecoderFormat {
 // asscoiate `code_hash` of decoder binary with its onchain deployment information
 #[cfg_attr(feature = "standalone_server", derive(Serialize, Deserialize))]
 #[cfg_attr(test, derive(Default))]
+#[derive(Clone)]
 pub struct OnchainDecoderDeployment {
     pub code_hash: H256,
     pub tx_hash: H256,
@@ -243,6 +244,7 @@ pub struct OnchainDecoderDeployment {
 
 #[cfg_attr(feature = "standalone_server", derive(Serialize, Deserialize))]
 #[cfg_attr(test, derive(Default))]
+#[derive(Clone)]
 pub enum HashType {
     #[serde(rename(serialize = "data", deserialize = "data"))]
     #[cfg_attr(test, default)]
@@ -268,6 +270,7 @@ impl From<&HashType> for ScriptHashType {
 
 #[cfg_attr(feature = "standalone_server", derive(Serialize, Deserialize))]
 #[cfg_attr(test, derive(Default))]
+#[derive(Clone)]
 pub struct ScriptId {
     pub code_hash: H256,
     pub hash_type: HashType,
@@ -276,6 +279,7 @@ pub struct ScriptId {
 // standalone server settings in TOML format
 #[cfg_attr(feature = "standalone_server", derive(Serialize, Deserialize))]
 #[cfg_attr(test, derive(Default))]
+#[derive(Clone)]
 pub struct Settings {
     pub protocol_versions: Vec<String>,
     pub ckb_rpc: String,

@@ -155,6 +155,7 @@ impl RpcClient {
     }
 }
 
+#[derive(Clone)]
 pub struct ImageFetchClient {
     base_url: HashMap<String, Url>,
     client: Client,
