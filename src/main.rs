@@ -28,6 +28,7 @@ async fn main() {
         serde_json::to_string_pretty(&settings).unwrap()
     );
     let rpc_server_address = settings.rpc_server_address.clone();
+    let restful_server_address = settings.restful_server_address.clone();
     let cache_expiration = settings.dobs_cache_expiration_sec;
     let decoder = decoder::DOBDecoder::new(settings);
 
@@ -50,15 +51,12 @@ async fn main() {
     let rpc_handler = http_server.start(decoder_server.clone().into_rpc());
 
     // Start RESTful API server
-    #[cfg(feature = "axum")]
-    {
-        let restful_address = "127.0.0.1:8090";
-        tracing::info!("running RESTful API server at {}", restful_address);
-
+    let restful_handle = if let Some(restful_server_address) = restful_server_address {
+        tracing::info!("running RESTful API server at {}", restful_server_address);
         let app =
             server::DecoderStandaloneServer::create_restful_routes().with_state(decoder_server);
 
-        let restful_listener = tokio::net::TcpListener::bind(restful_address)
+        let restful_listener = tokio::net::TcpListener::bind(&restful_server_address)
             .await
             .expect("Failed to bind RESTful server");
 
@@ -68,29 +66,16 @@ async fn main() {
                 .expect("RESTful server failed");
         });
 
-        tracing::info!("Both JSON-RPC and RESTful API servers are running");
-        tracing::info!("JSON-RPC server: {}", rpc_server_address);
-        tracing::info!("RESTful API server: {}", restful_address);
-        tracing::info!("Example RESTful endpoints:");
-        tracing::info!(
-            "  GET http://{}/dob_decode_svg/0x<spore_id>",
-            restful_address
-        );
-        tracing::info!("  GET http://{}/dob_decode/0x<spore_id>", restful_address);
-        tracing::info!("  GET http://{}/protocol_versions", restful_address);
+        Some(restful_handle)
+    } else {
+        None
+    };
 
-        tokio::signal::ctrl_c().await.unwrap();
-        tracing::info!("stopping both servers");
+    tokio::signal::ctrl_c().await.unwrap();
+    tracing::info!("stopping both servers");
 
+    rpc_handler.stop().unwrap();
+    if let Some(restful_handle) = restful_handle {
         restful_handle.abort();
-        rpc_handler.stop().unwrap();
-    }
-
-    #[cfg(not(feature = "axum"))]
-    {
-        tracing::info!("RESTful API not available (axum feature not enabled)");
-        tokio::signal::ctrl_c().await.unwrap();
-        tracing::info!("stopping JSON-RPC server");
-        rpc_handler.stop().unwrap();
     }
 }

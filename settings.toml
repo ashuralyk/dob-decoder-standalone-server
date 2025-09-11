@@ -13,6 +13,9 @@ image_fetcher_url = { btcfs = "https://mempool.space/api/tx/", ipfs = "https://i
 # address that rpc server running at in case of standalone server mode
 rpc_server_address = "0.0.0.0:8090"
 
+# address that restful api server running at
+restful_server_address = "0.0.0.0:8091"
+
 # directory that stores decoders on hard-disk, including on-chain and off-chain binary files
 decoders_cache_directory = "cache/decoders"
 

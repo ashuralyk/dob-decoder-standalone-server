@@ -292,6 +292,7 @@ pub struct Settings {
     )]
     pub image_fetcher_url: HashMap<String, Url>,
     pub rpc_server_address: String,
+    pub restful_server_address: Option<String>,
     pub decoders_cache_directory: PathBuf,
     pub dobs_cache_directory: PathBuf,
     pub dobs_cache_expiration_sec: u64,
