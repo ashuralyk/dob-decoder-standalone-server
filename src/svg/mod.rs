@@ -154,9 +154,11 @@ impl DOBSvgExtractor {
                 return Ok(None);
             };
             let image_content_base64 = STANDARD.encode(&image_content);
-            let bgcolor = bgcolor.unwrap_or("#000");
+            let bgcolor_style = bgcolor
+                .map(|v| format!("<style>svg {{ background-color: {v}; }}</style>"))
+                .unwrap_or_default();
             let svg_content = format!(
-                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {DEFAULT_SIZE} {DEFAULT_SIZE}" version="1.1"><style>svg {{ background-color: {bgcolor}; }}</style><image width="{DEFAULT_SIZE}" height="{DEFAULT_SIZE}" href="data:{image_mime_type};base64,{image_content_base64}" preserveAspectRatio="xMidYMid slice" /></svg>"#
+                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {DEFAULT_SIZE} {DEFAULT_SIZE}" version="1.1">{bgcolor_style}<image width="{DEFAULT_SIZE}" height="{DEFAULT_SIZE}" href="data:{image_mime_type};base64,{image_content_base64}" preserveAspectRatio="xMidYMid slice" /></svg>"#
             );
             Ok(Some(svg_content))
         } else {

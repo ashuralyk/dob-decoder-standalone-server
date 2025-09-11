@@ -80,8 +80,8 @@ pub enum Error {
     FetchFromBtcNodeError(String),
     #[error("BTC transaction format has broken: {0}")]
     InvalidBtcTransactionFormat(String),
-    #[error("Inscription format broken")]
-    InvalidInscriptionFormat,
+    #[error("Inscription format broken: {0}")]
+    InvalidInscriptionFormat(String),
     #[error("Inscription content must be hex format")]
     InvalidInscriptionContentHexFormat,
     #[error("Inscription content must be filled")]

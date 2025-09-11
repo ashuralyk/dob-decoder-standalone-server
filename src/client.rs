@@ -10,7 +10,7 @@ use ckb_jsonrpc_types::{
 use ckb_sdk::rpc::ckb_indexer::{Cell, Order, Pagination, SearchKey, Tx};
 use ckb_types::H256;
 use jsonrpc_core::futures::FutureExt;
-use lazy_regex::regex_replace_all;
+use lazy_regex::{regex, regex_replace_all};
 use reqwest::{Client, ClientBuilder, Url};
 use serde_json::Value;
 use std::time::Duration;
@@ -360,21 +360,35 @@ async fn parse_image_from_btcfs(url: Url, index: usize) -> Result<Vec<u8>, Error
     // parse inscription body
     let mut images = vec![];
     let mut witness_view = witness.as_str();
-    const HEADER: &str = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 696d6167652f706e67 OP_0 OP_PUSHDATA2 ";
+
+    // flexible header pattern, e.g. OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 696d6167652f706e67 OP_0 OP_PUSHDATA2
+    // note: arbitrary part is the specification of image type
+    let header_pattern = regex!(
+        r#"OP_IF\s+OP_PUSHBYTES_3\s+444f42\s+OP_PUSHBYTES_1\s+01\s+OP_PUSHBYTES_(\d+)\s+([0-9a-fA-F]+)\s+OP_0\s+OP_PUSHDATA2\s+"#
+    );
+
     while let (Some(start), Some(end)) = (witness_view.find("OP_IF"), witness_view.find("OP_ENDIF"))
     {
         if start >= end {
-            return Err(Error::InvalidInscriptionFormat);
+            return Err(Error::InvalidInscriptionFormat(
+                "bad start and end position".to_string(),
+            ));
         }
         let inscription = &witness_view[start..end + "OP_ENDIF".len()];
-        if !inscription.contains(HEADER) {
-            return Err(Error::InvalidInscriptionFormat);
+
+        if let Some(captures) = header_pattern.captures(inscription) {
+            let matched_header = &captures[0];
+            let base_removed = inscription.replace(matched_header, "");
+            let hexed = regex_replace_all!(r#"\s?OP\_\w+\s?"#, &base_removed, "");
+            let image = hex::decode(hexed.as_bytes())
+                .map_err(|_| Error::InvalidInscriptionContentHexFormat)?;
+            images.push(image);
+        } else {
+            return Err(Error::InvalidInscriptionFormat(
+                "HEADER pattern not found".to_string(),
+            ));
         }
-        let base_removed = inscription.replace(HEADER, "");
-        let hexed = regex_replace_all!(r#"\s?OP\_\w+\s?"#, &base_removed, "");
-        let image =
-            hex::decode(hexed.as_bytes()).map_err(|_| Error::InvalidInscriptionContentHexFormat)?;
-        images.push(image);
+
         witness_view = &witness_view[end + "OP_ENDIF".len()..];
     }
     if images.is_empty() {
@@ -386,4 +400,41 @@ async fn parse_image_from_btcfs(url: Url, index: usize) -> Result<Vec<u8>, Error
         .cloned()
         .ok_or(Error::ExceededInscriptionIndex)?;
     Ok(image)
+}
+
+#[cfg(test)]
+mod tests {
+    use lazy_regex::regex;
+
+    #[test]
+    fn test_header_regex_pattern() {
+        // Test the regex pattern with the example from the user
+        let header_pattern = regex!(
+            r#"OP_IF\s+OP_PUSHBYTES_3\s+444f42\s+OP_PUSHBYTES_1\s+01\s+OP_PUSHBYTES_(\d+)\s+([0-9a-fA-F]+)\s+OP_0\s+OP_PUSHDATA2\s+"#
+        );
+
+        // Test with the original fixed header
+        let original_header = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 696d6167652f706e67 OP_0 OP_PUSHDATA2 ";
+        assert!(header_pattern.is_match(original_header));
+
+        // Test with different hex data (the user's example)
+        let test_header = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 696d6167652f706e67 OP_0 OP_PUSHDATA2 ";
+        assert!(header_pattern.is_match(test_header));
+
+        // Test with different byte count
+        let different_bytes = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_12 1234567890abcdef123456 OP_0 OP_PUSHDATA2 ";
+        assert!(header_pattern.is_match(different_bytes));
+
+        // Test that it captures the byte count and hex data
+        if let Some(captures) = header_pattern.captures(test_header) {
+            assert_eq!(&captures[1], "9"); // byte count
+            assert_eq!(&captures[2], "696d6167652f706e67"); // hex data
+        } else {
+            panic!("Regex should have captured the groups");
+        }
+
+        // Test that invalid headers don't match
+        let invalid_header = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 invalid_hex OP_0 OP_PUSHDATA2 ";
+        assert!(!header_pattern.is_match(invalid_header));
+    }
 }
