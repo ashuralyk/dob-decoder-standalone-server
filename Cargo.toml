@@ -25,6 +25,7 @@ lazy_static = "1.4"
 lazy-regex = "3.1.0"
 chrono = { version = "0.4", features = ["serde"] }
 ckb-vm = { version = "0.24", features = ["asm"] }
+axum = { version = "0.7", features = ["macros"] }
 
 spore-types = { git = "https://github.com/sporeprotocol/spore-contract", rev = "81315ca" }
 
@@ -34,9 +35,8 @@ tower = { version = "0.5", optional = true }
 toml = { version = "0.8.2", optional = true }
 tokio = { version = "1.37", features = ["rt", "signal"], optional = true }
 tracing-subscriber = { version = "0.3.18", features = ["fmt", "env-filter"], optional = true }
-axum = { version = "0.7", features = ["macros"], optional = true }
 
 [features]
 default = ["standalone_server", "render_debug"]
-standalone_server = ["jsonrpsee", "toml", "tokio", "tracing-subscriber", "tower-http", "tower", "axum"]
+standalone_server = ["jsonrpsee", "toml", "tokio", "tracing-subscriber", "tower-http", "tower"]
 render_debug = []
