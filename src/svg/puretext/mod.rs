@@ -1,6 +1,7 @@
 use serde_json::Value;
 
 pub mod constants;
+pub mod font;
 pub mod parsers;
 pub mod render;
 
