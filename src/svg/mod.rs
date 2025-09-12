@@ -224,7 +224,7 @@ impl DOBSvgExtractor {
 
         // Let upstream fallback to next process if no URLs are found
         if all_urls.is_empty() {
-            return Ok(None);
+            return Ok(Some(svg_content));
         }
 
         // Fetch all images
