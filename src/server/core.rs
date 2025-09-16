@@ -6,12 +6,12 @@ use jsonrpsee::{proc_macros::rpc, tracing, types::error::ErrorObjectOwned};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::client::ImageFetchClient;
 use crate::decoder::{
     helpers::{decode_cluster_data, decode_spore_data},
     DOBDecoder,
 };
 use crate::server::utils::{read_dob_from_cache, trim_0x, write_dob_to_cache};
-use crate::svg::DOBSvgExtractor;
 use crate::types::Error;
 
 // decoding result contains rendered result from native decoder and DNA string for optional use
@@ -41,9 +41,6 @@ trait DecoderRpc {
         spore_data: String,
         cluster_data: String,
     ) -> Result<String, ErrorObjectOwned>;
-
-    #[method(name = "dob_decode_svg")]
-    async fn decode_svg(&self, hexed_spore_id: String) -> Result<String, ErrorObjectOwned>;
 
     #[method(name = "dob_extract_image_from_fsuri")]
     async fn extract_image_from_fsuri(
@@ -82,10 +79,6 @@ impl DecoderRpcServer for DecoderStandaloneServer {
             .await
     }
 
-    async fn decode_svg(&self, hexed_spore_id: String) -> Result<String, ErrorObjectOwned> {
-        self.service_decode_svg(hexed_spore_id).await
-    }
-
     async fn extract_image_from_fsuri(
         &self,
         fsuri: String,
@@ -100,13 +93,13 @@ impl DecoderRpcServer for DecoderStandaloneServer {
 pub struct DecoderStandaloneServer {
     decoder: DOBDecoder,
     cache_expiration: u64,
-    svg_extractor: DOBSvgExtractor,
+    image_fetcher: ImageFetchClient,
 }
 
 impl DecoderStandaloneServer {
     pub fn new(decoder: DOBDecoder, cache_expiration: u64) -> Self {
         Self {
-            svg_extractor: DOBSvgExtractor::new(&decoder.setting().image_fetcher_url),
+            image_fetcher: ImageFetchClient::new(&decoder.setting().image_fetcher_url),
             decoder,
             cache_expiration,
         }
@@ -178,31 +171,13 @@ impl DecoderStandaloneServer {
         Ok(result)
     }
 
-    /// Abstracted service method for SVG decoding
-    pub async fn service_decode_svg(
-        &self,
-        hexed_spore_id: String,
-    ) -> Result<String, ErrorObjectOwned> {
-        let ServerDecodeResult {
-            render_output,
-            dob_content: _,
-        } = serde_json::from_str(&self.service_decode(hexed_spore_id).await?)
-            .map_err(|e| ErrorObjectOwned::owned(-1, e.to_string(), None::<()>))?;
-        let svg = self.svg_extractor.extract_svg(render_output).await?;
-        Ok(svg)
-    }
-
     /// Abstracted service method for image extraction
     pub async fn service_extract_image_from_fsuri(
         &self,
         fsuri: String,
         encode_type: Option<String>,
     ) -> Result<String, ErrorObjectOwned> {
-        let raw_images = self
-            .svg_extractor
-            .get_fetcher()
-            .fetch_images(&[fsuri])
-            .await?;
+        let raw_images = self.image_fetcher.fetch_images(&[fsuri]).await?;
         let image = raw_images.first().ok_or(Error::NoImageFound)?;
 
         match encode_type.as_deref() {

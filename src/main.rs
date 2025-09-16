@@ -8,7 +8,6 @@ use tracing_subscriber::EnvFilter;
 mod client;
 mod decoder;
 mod server;
-mod svg;
 mod types;
 mod vm;
 

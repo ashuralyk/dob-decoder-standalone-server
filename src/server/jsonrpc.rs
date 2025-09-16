@@ -33,11 +33,8 @@ trait DecoderRpc {
         cluster_data: String,
     ) -> Result<String, ErrorObjectOwned>;
 
-    #[method(name = "dob_decode_svg")]
-    async fn decode_svg(&self, hexed_spore_id: String) -> Result<String, ErrorObjectOwned>;
-
-    #[method(name = "dob_extract_image_from_fsuri")]
-    async fn extract_image_from_fsuri(
+    #[method(name = "dob_extract_image")]
+    async fn extract_image(
         &self,
         fsuri: String,
         encode_type: Option<String>,
@@ -73,11 +70,7 @@ impl DecoderRpcServer for DecoderStandaloneServer {
             .await
     }
 
-    async fn decode_svg(&self, hexed_spore_id: String) -> Result<String, ErrorObjectOwned> {
-        self.service_decode_svg(hexed_spore_id).await
-    }
-
-    async fn extract_image_from_fsuri(
+    async fn extract_image(
         &self,
         fsuri: String,
         encode_type: Option<String>,

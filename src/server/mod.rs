@@ -1,7 +1,7 @@
+mod core;
 mod jsonrpc;
 mod restful;
-mod server;
 mod utils;
 
+pub use core::DecoderStandaloneServer;
 pub use jsonrpc::DecoderRpcServer;
-pub use server::DecoderStandaloneServer;

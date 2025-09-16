@@ -1,60 +1,39 @@
 use axum::{
-    extract::Path,
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::get,
     Router,
 };
 use jsonrpsee::tracing;
+use serde::Deserialize;
 
 use crate::server::DecoderStandaloneServer;
+
+#[derive(Deserialize)]
+struct ExtractImageQuery {
+    encode: Option<String>,
+}
 
 // RESTful API implementation
 impl DecoderStandaloneServer {
     /// Create RESTful API routes
     pub fn create_restful_routes() -> Router<Self> {
         Router::new()
-            .route("/dob_decode_svg/:spore_id", get(handle_dob_decode_svg))
             .route("/dob_decode/:spore_id", get(handle_dob_decode))
             .route("/dob_batch_decode/:spore_ids", get(handle_dob_batch_decode))
             .route(
-                "/dob_raw_decode/:spore_data/:cluster_data",
-                get(handle_dob_raw_decode),
-            )
-            .route(
-                "/dob_extract_image_from_fsuri/:fsuri",
+                "/dob_extract_image/:fsproto/:uri",
                 get(handle_extract_image_from_fsuri),
             )
             .route("/protocol_versions", get(handle_protocol_versions))
     }
 }
 
-/// Handle dob_decode_svg RESTful endpoint
-async fn handle_dob_decode_svg(
-    Path(spore_id): Path<String>,
-    axum::extract::State(server): axum::extract::State<DecoderStandaloneServer>,
-) -> impl IntoResponse {
-    tracing::info!("RESTful API: decoding SVG for spore_id {}", spore_id);
-
-    match server.service_decode_svg(spore_id).await {
-        Ok(svg_content) => {
-            tracing::info!("RESTful API: SVG decoded successfully");
-            (StatusCode::OK, Html(svg_content))
-        }
-        Err(error) => {
-            tracing::error!("RESTful API: SVG decode failed: {}", error);
-            (
-                StatusCode::BAD_REQUEST,
-                Html(format!("Error: {}", error.message())),
-            )
-        }
-    }
-}
-
 /// Handle dob_decode RESTful endpoint
 async fn handle_dob_decode(
     Path(spore_id): Path<String>,
-    axum::extract::State(server): axum::extract::State<DecoderStandaloneServer>,
+    State(server): State<DecoderStandaloneServer>,
 ) -> impl IntoResponse {
     tracing::info!("RESTful API: decoding spore_id {}", spore_id);
 
@@ -76,7 +55,7 @@ async fn handle_dob_decode(
 /// Handle dob_batch_decode RESTful endpoint
 async fn handle_dob_batch_decode(
     Path(spore_ids): Path<String>,
-    axum::extract::State(server): axum::extract::State<DecoderStandaloneServer>,
+    State(server): State<DecoderStandaloneServer>,
 ) -> impl IntoResponse {
     tracing::info!("RESTful API: batch decoding spore_ids: {}", spore_ids);
 
@@ -99,40 +78,22 @@ async fn handle_dob_batch_decode(
     }
 }
 
-/// Handle dob_raw_decode RESTful endpoint
-async fn handle_dob_raw_decode(
-    Path((spore_data, cluster_data)): Path<(String, String)>,
-    axum::extract::State(server): axum::extract::State<DecoderStandaloneServer>,
-) -> impl IntoResponse {
-    tracing::info!(
-        "RESTful API: raw decoding spore_data: {}, cluster_data: {}",
-        spore_data,
-        cluster_data
-    );
-
-    match server.service_raw_decode(spore_data, cluster_data).await {
-        Ok(result) => {
-            tracing::info!("RESTful API: raw decode successful");
-            (StatusCode::OK, Html(result))
-        }
-        Err(error) => {
-            tracing::error!("RESTful API: raw decode failed: {}", error);
-            (
-                StatusCode::BAD_REQUEST,
-                Html(format!("Error: {}", error.message())),
-            )
-        }
-    }
-}
-
 /// Handle dob_extract_image_from_fsuri RESTful endpoint
 async fn handle_extract_image_from_fsuri(
-    Path(fsuri): Path<String>,
-    axum::extract::State(server): axum::extract::State<DecoderStandaloneServer>,
+    Path((fsproto, uri)): Path<(String, String)>,
+    Query(query): Query<ExtractImageQuery>,
+    State(server): State<DecoderStandaloneServer>,
 ) -> impl IntoResponse {
-    tracing::info!("RESTful API: extracting image from fsuri: {}", fsuri);
+    tracing::info!(
+        "RESTful API: extracting image from fsuri: {fsproto}://{uri} with encode: {:?}",
+        query.encode
+    );
 
-    match server.service_extract_image_from_fsuri(fsuri, None).await {
+    let fsuri = format!("{}://{}", fsproto, uri);
+    match server
+        .service_extract_image_from_fsuri(fsuri, query.encode)
+        .await
+    {
         Ok(result) => {
             tracing::info!("RESTful API: image extraction successful");
             (StatusCode::OK, Html(result))
@@ -149,7 +110,7 @@ async fn handle_extract_image_from_fsuri(
 
 /// Handle protocol_versions RESTful endpoint
 async fn handle_protocol_versions(
-    axum::extract::State(server): axum::extract::State<DecoderStandaloneServer>,
+    State(server): State<DecoderStandaloneServer>,
 ) -> impl IntoResponse {
     tracing::info!("RESTful API: getting protocol versions");
 

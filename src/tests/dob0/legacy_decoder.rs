@@ -1,13 +1,10 @@
 use ckb_types::{h256, H256};
 
 use crate::decoder::{helpers::decode_spore_content, DOBDecoder};
-use crate::svg::puretext::parsers::{dob_output_parser, render_text_params_parser};
-use crate::svg::puretext::render::render_text_parser_result_to_svg;
-use crate::svg::DOBSvgExtractor;
 use crate::tests::{prepare_settings, SettingType};
 use crate::types::{
     ClusterDescriptionField, DOBClusterFormat, DOBClusterFormatV0, DOBDecoderFormat,
-    DecoderLocationType, StandardDOBOutput,
+    DecoderLocationType,
 };
 use serde_json::{json, Value};
 
@@ -15,14 +12,6 @@ const EXPECTED_UNICORN_RENDER_RESULT: &str = "[{\"name\":\"wuxing_yinyang\",\"tr
 const EXPECTED_NERVAPE_RENDER_RESULT: &str = "[{\"name\":\"prev.type\",\"traits\":[{\"String\":\"text\"}]},{\"name\":\"prev.bg\",\"traits\":[{\"String\":\"btcfs://59e87ca177ef0fd457e87e9f93627660022cf519b531e1f4e3a6dda9e5e33827i0\"}]},{\"name\":\"prev.bgcolor\",\"traits\":[{\"String\":\"#CEBAF7\"}]},{\"name\":\"Background\",\"traits\":[{\"Number\":170}]},{\"name\":\"Suit\",\"traits\":[{\"Number\":236}]},{\"name\":\"Upper body\",\"traits\":[{\"Number\":53}]},{\"name\":\"Lower body\",\"traits\":[{\"Number\":189}]},{\"name\":\"Headwear\",\"traits\":[{\"Number\":175}]},{\"name\":\"Mask\",\"traits\":[{\"Number\":153}]},{\"name\":\"Eyewear\",\"traits\":[{\"Number\":126}]},{\"name\":\"Mouth\",\"traits\":[{\"Number\":14}]},{\"name\":\"Ears\",\"traits\":[{\"Number\":165}]},{\"name\":\"Tattoo\",\"traits\":[{\"Number\":231}]},{\"name\":\"Accessory\",\"traits\":[{\"Number\":78}]},{\"name\":\"Handheld\",\"traits\":[{\"Number\":240}]},{\"name\":\"Special\",\"traits\":[{\"Number\":70}]}]";
 const NERVAPE_SPORE_ID: H256 =
     h256!("0x9dd9604d44d6640d1533c9f97f89438f17526e645f6c35aa08d8c7d844578580");
-const MAINNET_NERVAPE_SPORE_ID: H256 =
-    h256!("0xbbe57f0e7f7ca6e6c59007b28150e39c9c6f5c209493801cfc9ef125e0937ed4");
-const UNICORN_SPORE_ID: H256 =
-    h256!("0xe5bd5bbf82fec9107ba86fb65b3756915ca0d3a28d5e13a0aa82269b62a129ef");
-const MAINNET_WORLD3_SPORE_ID: H256 =
-    h256!("0xd1b01eda64c924ffe83a8d7d6511ceb56dcde9d52722e9d2df3f2db3c13f1fda");
-const TESTNET_UNICORN_PNG_SPORE_ID: H256 =
-    h256!("0xe6b003cdbb042eff3b56fdceee725b42f9397b9044b8323056f283161c828357");
 
 fn generate_nervape_dob_ingredients(onchain_decoder: bool) -> (Value, ClusterDescriptionField) {
     let nervape_content = json!({
@@ -179,170 +168,4 @@ fn test_decode_multiple_spore_data() {
             .unwrap_or_else(|_| panic!("assert type index {i}"));
         assert_eq!(v, dna, "object type comparison failed");
     });
-}
-
-#[tokio::test]
-async fn test_unicorn_dna_to_svg() {
-    let render_result = decode_unicorn_dna(false).await;
-    let parsed_render_result: Vec<StandardDOBOutput> =
-        serde_json::from_str(&render_result).unwrap();
-    let output_parser_result = dob_output_parser(&parsed_render_result);
-    println!("\noutput_parser_result: {output_parser_result:?}");
-
-    let text_parser_result = render_text_params_parser(
-        &output_parser_result.traits,
-        &output_parser_result.index_var_register,
-        None,
-    );
-    println!("\ntext_parser_result: {text_parser_result:?}");
-
-    let svg = render_text_parser_result_to_svg(&text_parser_result);
-    println!("\nGenerated SVG:\n{}", svg);
-}
-
-#[tokio::test]
-async fn test_fetch_and_decode_mainnet_nervape_dna_to_svg() {
-    let settings = prepare_settings(SettingType::Mainnet, vec![]);
-    let svg_extractor = DOBSvgExtractor::new(&settings.image_fetcher_url);
-    let decoder = DOBDecoder::new(settings);
-    let (_, dna, dob_metadata) = decoder
-        .fetch_decode_ingredients(MAINNET_NERVAPE_SPORE_ID.into())
-        .await
-        .expect("fetch");
-    let render_result = decoder
-        .decode_dna(&dna, dob_metadata)
-        // array type
-        .await
-        .expect("decode");
-    let svg_content = svg_extractor.extract_svg(render_result).await.unwrap();
-    println!("svg_content: {svg_content}");
-}
-
-#[test]
-fn test_manual_render_output_to_svg() {
-    let render_output_source = serde_json::json!([
-        {
-            "name": "wuxing_yinyang",
-            "traits": [
-                { "String": "3<_>" }
-            ]
-        },
-        {
-            "name": "prev.bgcolor",
-            "traits": [
-                { "String": "#(70deg, blue, pink, #f00)" }
-            ]
-        },
-        {
-            "name": "prev<%v>",
-            "traits": [
-                { "String": "(%wuxing_yinyang):['#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF', '#000000', '#000000', '#000000', '#000000', '#000000'])" }
-            ]
-        },
-        {
-            "name": "Spirits",
-            "traits": [
-                { "String": "(%wuxing_yinyang):['Metal, Golden Body', 'Wood, Blue Body', 'Water, White Body', 'Fire, Red Body', 'Earth, Colorful Body']" }
-            ]
-        },
-        {
-            "name": "Yin Yang",
-            "traits": [
-                { "String": "(%wuxing_yinyang):['Yin, Long hair', 'Yin, Long hair', 'Yin, Long hair', 'Yin, Long hair', 'Yin, Long hair', 'Yang, Short Hair', 'Yang, Short Hair', 'Yang, Short Hair', 'Yang, Short Hair', 'Yang, Short Hair']" }
-            ]
-        },
-        {
-            "name": "Talents",
-            "traits": [
-                { "String": "(%wuxing_yinyang):['Guard', 'Attack', 'Death', 'Revival', 'Forget', 'Summon', 'Prophet', 'Curse', 'Hermit', 'Crown']" }
-            ]
-        },
-        {
-            "name": "Horn",
-            "traits": [
-                { "String": "(%wuxing_yinyang):['Praetorian Horn', 'Warrior Horn', 'Hel Horn', 'Shaman Horn', 'Lethe Horn', 'Bard Horn', 'Sibyl Horn ', 'Necromancer Horn', 'Lao Tsu Horn', 'Caesar Horn']" }
-            ]
-        },
-        {
-            "name": "Wings",
-            "traits": [
-                { "String": "Golden Wings" }
-            ]
-        },
-        {
-            "name": "Tails<%k: %v>",
-            "traits": [
-                { "String": "Meteor Tails<#000*bi>" }
-            ]
-        },
-        {
-            "name": "Horseshoes",
-            "traits": [
-                { "String": "Dimond Horseshoes" }
-            ]
-        },
-        {
-            "name": "Destiny Number",
-            "traits": [
-                { "Number": 59616 }
-            ]
-        },
-        {
-            "name": "Lucky Number",
-            "traits": [
-                { "Number": 35 }
-            ]
-        }
-    ]);
-    let render_output: Vec<StandardDOBOutput> =
-        serde_json::from_value(render_output_source).unwrap();
-
-    let output_parser_result = dob_output_parser(&render_output);
-    println!("\noutput_parser_result: {output_parser_result:?}");
-
-    let text_parser_result = render_text_params_parser(
-        &output_parser_result.traits,
-        &output_parser_result.index_var_register,
-        None,
-    );
-    println!("\ntext_parser_result: {text_parser_result:?}");
-
-    let svg = render_text_parser_result_to_svg(&text_parser_result);
-    println!("\nGenerated SVG:\n{}", svg);
-}
-
-async fn decode_svg(network: SettingType, spore_id: H256) -> String {
-    let settings = prepare_settings(network, vec![]);
-    let svg_extractor = DOBSvgExtractor::new(&settings.image_fetcher_url);
-    let decoder = DOBDecoder::new(settings);
-    let (_, dna, dob_metadata) = decoder
-        .fetch_decode_ingredients(spore_id.into())
-        .await
-        .expect("fetch");
-    let render_result = decoder
-        .decode_dna(&dna, dob_metadata)
-        .await
-        .expect("decode");
-    let svg_content = svg_extractor.extract_svg(render_result).await.unwrap();
-    svg_content
-}
-
-#[tokio::test]
-async fn test_decode_mainnet_unicorn_to_svg() {
-    let svg_content = decode_svg(SettingType::Mainnet, UNICORN_SPORE_ID).await;
-    println!("svg_content: {svg_content}");
-}
-
-#[tokio::test]
-async fn test_decode_mainnet_world3_to_svg() {
-    let svg_content = decode_svg(SettingType::Mainnet, MAINNET_WORLD3_SPORE_ID).await;
-    std::fs::write("world3.svg", &svg_content).unwrap();
-    println!("svg_content: {svg_content}");
-}
-
-#[tokio::test]
-async fn test_decode_testnet_unicorn_png_to_svg() {
-    let svg_content = decode_svg(SettingType::Testnet, TESTNET_UNICORN_PNG_SPORE_ID).await;
-    std::fs::write("unicorn_png.svg", &svg_content).unwrap();
-    println!("svg_content: {svg_content}");
 }

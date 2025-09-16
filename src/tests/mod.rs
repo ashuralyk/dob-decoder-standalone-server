@@ -5,6 +5,7 @@ use crate::types::Settings;
 mod dob0;
 mod dob1;
 
+#[allow(dead_code)]
 pub enum SettingType {
     Mainnet,
     Testnet,

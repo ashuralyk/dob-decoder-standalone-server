@@ -11,9 +11,8 @@ use ckb_sdk::rpc::ckb_indexer::{Cell, Order, Pagination, SearchKey, Tx};
 use ckb_types::H256;
 use jsonrpc_core::futures::FutureExt;
 use lazy_regex::{regex, regex_replace_all};
-use reqwest::{Client, ClientBuilder, Url};
+use reqwest::{Client, Url};
 use serde_json::Value;
-use std::time::Duration;
 
 use crate::types::Error;
 
@@ -158,21 +157,12 @@ impl RpcClient {
 #[derive(Clone)]
 pub struct ImageFetchClient {
     base_url: HashMap<String, Url>,
-    client: Client,
 }
 
 impl ImageFetchClient {
     pub fn new(base_url: &HashMap<String, Url>) -> Self {
-        let client = ClientBuilder::new()
-            .timeout(Duration::from_secs(30)) // 30 seconds timeout
-            .connect_timeout(Duration::from_secs(10)) // 10 seconds connection timeout
-            .danger_accept_invalid_certs(true) // Bypass SSL certificate verification
-            .build()
-            .expect("Failed to create HTTP client");
-
         Self {
             base_url: base_url.clone(),
-            client,
         }
     }
 
@@ -210,75 +200,6 @@ impl ImageFetchClient {
                         .boxed(),
                     );
                 }
-                URI::Http(url) => {
-                    let client = self.client.clone();
-                    requests.push(
-                        async move {
-                            let response = client.get(url.clone()).send().await.map_err(|e| {
-                                Error::FetchFromHttpError(format!("HTTP request failed: {}", e))
-                            })?;
-
-                            if !response.status().is_success() {
-                                return Err(Error::FetchFromHttpError(format!(
-                                    "HTTP request failed with status: {}",
-                                    response.status()
-                                )));
-                            }
-
-                            let image = response
-                                .bytes()
-                                .await
-                                .map_err(|e| {
-                                    Error::FetchFromHttpError(format!(
-                                        "Failed to read response body: {}",
-                                        e
-                                    ))
-                                })?
-                                .to_vec();
-                            Ok(image)
-                        }
-                        .boxed(),
-                    );
-                }
-                URI::Https(url) => {
-                    let client = self.client.clone();
-                    requests.push(
-                        async move {
-                            let response = client.get(url.clone()).send().await.map_err(|e| {
-                                let error_msg = if e.is_connect() {
-                                    format!("HTTPS connection failed: {}", e)
-                                } else if e.is_timeout() {
-                                    format!("HTTPS request timeout: {}", e)
-                                } else if e.is_request() {
-                                    format!("HTTPS request error: {}", e)
-                                } else {
-                                    format!("HTTPS error: {}", e)
-                                };
-                                Error::FetchFromHttpError(error_msg)
-                            })?;
-
-                            if !response.status().is_success() {
-                                return Err(Error::FetchFromHttpError(format!(
-                                    "HTTPS request failed with status: {}",
-                                    response.status()
-                                )));
-                            }
-
-                            let image = response
-                                .bytes()
-                                .await
-                                .map_err(|e| {
-                                    Error::FetchFromHttpError(format!(
-                                        "Failed to read HTTPS response body: {}",
-                                        e
-                                    ))
-                                })?
-                                .to_vec();
-                            Ok(image)
-                        }
-                        .boxed(),
-                    );
-                }
             }
         }
         let mut images = vec![];
@@ -294,8 +215,6 @@ impl ImageFetchClient {
 enum URI {
     BTCFS(String, usize),
     IPFS(String),
-    Http(String),
-    Https(String),
 }
 
 impl TryFrom<&String> for URI {
@@ -315,10 +234,6 @@ impl TryFrom<&String> for URI {
         } else if let Some(body) = uri.strip_prefix("ipfs://") {
             let hash = body.to_string();
             Ok(URI::IPFS(hash))
-        } else if uri.starts_with("https") {
-            Ok(URI::Https(uri.clone()))
-        } else if uri.starts_with("http") {
-            Ok(URI::Http(uri.clone()))
         } else {
             Err(Error::InvalidOnchainFsuriFormat)
         }
@@ -400,41 +315,4 @@ async fn parse_image_from_btcfs(url: Url, index: usize) -> Result<Vec<u8>, Error
         .cloned()
         .ok_or(Error::ExceededInscriptionIndex)?;
     Ok(image)
-}
-
-#[cfg(test)]
-mod tests {
-    use lazy_regex::regex;
-
-    #[test]
-    fn test_header_regex_pattern() {
-        // Test the regex pattern with the example from the user
-        let header_pattern = regex!(
-            r#"OP_IF\s+OP_PUSHBYTES_3\s+444f42\s+OP_PUSHBYTES_1\s+01\s+OP_PUSHBYTES_(\d+)\s+([0-9a-fA-F]+)\s+OP_0\s+OP_PUSHDATA2\s+"#
-        );
-
-        // Test with the original fixed header
-        let original_header = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 696d6167652f706e67 OP_0 OP_PUSHDATA2 ";
-        assert!(header_pattern.is_match(original_header));
-
-        // Test with different hex data (the user's example)
-        let test_header = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 696d6167652f706e67 OP_0 OP_PUSHDATA2 ";
-        assert!(header_pattern.is_match(test_header));
-
-        // Test with different byte count
-        let different_bytes = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_12 1234567890abcdef123456 OP_0 OP_PUSHDATA2 ";
-        assert!(header_pattern.is_match(different_bytes));
-
-        // Test that it captures the byte count and hex data
-        if let Some(captures) = header_pattern.captures(test_header) {
-            assert_eq!(&captures[1], "9"); // byte count
-            assert_eq!(&captures[2], "696d6167652f706e67"); // hex data
-        } else {
-            panic!("Regex should have captured the groups");
-        }
-
-        // Test that invalid headers don't match
-        let invalid_header = "OP_IF OP_PUSHBYTES_3 444f42 OP_PUSHBYTES_1 01 OP_PUSHBYTES_9 invalid_hex OP_0 OP_PUSHDATA2 ";
-        assert!(!header_pattern.is_match(invalid_header));
-    }
 }
