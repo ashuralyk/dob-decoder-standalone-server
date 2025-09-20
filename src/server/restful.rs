@@ -12,6 +12,7 @@ use crate::server::DecoderStandaloneServer;
 
 #[derive(Deserialize)]
 struct ExtractImageQuery {
+    uri: String,
     encode: Option<String>,
 }
 
@@ -22,10 +23,7 @@ impl DecoderStandaloneServer {
         Router::new()
             .route("/dob_decode/:spore_id", get(handle_dob_decode))
             .route("/dob_batch_decode/:spore_ids", get(handle_dob_batch_decode))
-            .route(
-                "/dob_extract_image/:fsproto/:uri",
-                get(handle_extract_image_from_fsuri),
-            )
+            .route("/dob_extract_image", get(handle_extract_image_from_fsuri))
             .route("/protocol_versions", get(handle_protocol_versions))
     }
 }
@@ -80,18 +78,17 @@ async fn handle_dob_batch_decode(
 
 /// Handle dob_extract_image_from_fsuri RESTful endpoint
 async fn handle_extract_image_from_fsuri(
-    Path((fsproto, uri)): Path<(String, String)>,
     Query(query): Query<ExtractImageQuery>,
     State(server): State<DecoderStandaloneServer>,
 ) -> impl IntoResponse {
     tracing::info!(
-        "RESTful API: extracting image from fsuri: {fsproto}://{uri} with encode: {:?}",
+        "RESTful API: extracting image from fsuri: {} with encode: {:?}",
+        query.uri,
         query.encode
     );
 
-    let fsuri = format!("{}://{}", fsproto, uri);
     match server
-        .service_extract_image_from_fsuri(fsuri, query.encode)
+        .service_extract_image_from_fsuri(query.uri, query.encode)
         .await
     {
         Ok(result) => {
