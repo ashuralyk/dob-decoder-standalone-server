@@ -45,14 +45,14 @@ async fn main() {
 
     // Create the decoder server instance
     let decoder_server = server::DecoderStandaloneServer::new(decoder, cache_expiration);
-
-    // Start JSON-RPC server
-    tracing::info!("running JSON-RPC decoder server at {}", rpc_server_address);
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
-    let http_middleware = tower::ServiceBuilder::new().layer(cors);
+
+    // Start JSON-RPC server
+    tracing::info!("running JSON-RPC decoder server at {}", rpc_server_address);
+    let http_middleware = tower::ServiceBuilder::new().layer(cors.clone());
     let http_server = Server::builder()
         .set_http_middleware(http_middleware)
         .build(rpc_server_address.clone())
@@ -64,8 +64,10 @@ async fn main() {
     // Start RESTful API server
     let restful_handle = if let Some(restful_server_address) = restful_server_address {
         tracing::info!("running RESTful API server at {}", restful_server_address);
-        let app =
-            server::DecoderStandaloneServer::create_restful_routes().with_state(decoder_server);
+
+        let app = server::DecoderStandaloneServer::create_restful_routes()
+            .with_state(decoder_server)
+            .layer(cors);
 
         let restful_listener = tokio::net::TcpListener::bind(&restful_server_address)
             .await
