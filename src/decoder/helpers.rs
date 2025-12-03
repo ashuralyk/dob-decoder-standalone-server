@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::SystemTime};
+use std::path::PathBuf;
 
 use ckb_jsonrpc_types::Either;
 use ckb_sdk::{constants::TYPE_ID_CODE_HASH, rpc::ckb_indexer::Tx, traits::CellQueryOptions};
@@ -33,25 +33,22 @@ fn build_type_script_search_option(type_script: Script) -> CellQueryOptions {
 }
 
 fn file_older_than_minutes(file_path: &PathBuf, minutes: u64) -> bool {
-    match std::fs::metadata(file_path) {
-        Ok(metadata) => {
-            let Ok(mut duration) = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) else {
-                return true;
-            };
-            if let Ok(Ok(checkpoint)) = metadata
-                .modified()
-                .map(|time| time.duration_since(SystemTime::UNIX_EPOCH))
-            {
-                duration = duration.saturating_sub(checkpoint);
-            } else if let Ok(Ok(checkpoint)) = metadata
-                .created()
-                .map(|time| time.duration_since(SystemTime::UNIX_EPOCH))
-            {
-                duration = duration.saturating_sub(checkpoint);
-            }
-            duration.as_secs() / 60 >= minutes
-        }
-        Err(_) => true,
+    if minutes == 0 {
+        return true;
+    }
+    let metadata = match std::fs::metadata(file_path) {
+        Ok(m) => m,
+        Err(_) => return true, // File doesn't exist or we can't access it, so it's "old".
+    };
+
+    let file_time = match metadata.modified().or_else(|_| metadata.created()) {
+        Ok(time) => time,
+        Err(_) => return true, // Can't get a timestamp, assume it's old.
+    };
+
+    match file_time.elapsed() {
+        Ok(elapsed) => elapsed.as_secs() >= minutes * 60,
+        Err(_) => true, // System clock is earlier than file time, assume it's old to be safe.
     }
 }
 
